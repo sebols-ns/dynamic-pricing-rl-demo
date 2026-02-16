@@ -103,9 +103,10 @@ export function useRlTraining() {
       result.episode = episodeRef.current;
       historyRef.current.push(result);
 
-      // Convergence check: rolling average of last 50 episodes
+      // Convergence check: only after agent is mostly exploiting (epsilon < 0.3)
       const hist = historyRef.current;
-      if (hist.length >= 50) {
+      const currentEpsilon = agentRef.current!.epsilon;
+      if (hist.length >= 50 && currentEpsilon < 0.3) {
         const recent = hist.slice(-50);
         const rollingAvg = recent.reduce((s, r) => s + r.avgReward, 0) / recent.length;
         if (rollingAvg > bestRollingAvgRef.current + config.earlyStopThreshold) {
