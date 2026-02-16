@@ -280,7 +280,7 @@ export function Backtesting() {
             />
             <RechartsTooltip
               contentStyle={tooltipStyle}
-              formatter={(value: number, name: string) => [formatDollars(value), name]}
+              formatter={((value: number, name: string) => [formatDollars(value), name]) as never}
             />
             <Legend />
             <Area
@@ -330,7 +330,7 @@ export function Backtesting() {
             />
             <RechartsTooltip
               contentStyle={tooltipStyle}
-              formatter={(value: number, name: string) => [`$${value.toFixed(2)}`, name]}
+              formatter={((value: number, name: string) => [`$${value.toFixed(2)}`, name]) as never}
             />
             <Legend />
             <Line
@@ -379,7 +379,7 @@ export function Backtesting() {
               />
               <RechartsTooltip
                 contentStyle={tooltipStyle}
-                formatter={(value: number) => [`${value.toFixed(1)}%`, 'Lift vs Historical']}
+                formatter={((value: number) => [`${value.toFixed(1)}%`, 'Lift vs Historical']) as never}
               />
               <Bar dataKey="lift" fill={CHART_COLORS.PRIMARY} radius={[4, 4, 0, 0]} isAnimationActive={false} />
             </RechartsBarChart>
@@ -400,7 +400,7 @@ export function Backtesting() {
               />
               <RechartsTooltip
                 contentStyle={tooltipStyle}
-                formatter={(value: number) => [`${value.toFixed(1)}%`, 'Lift vs Historical']}
+                formatter={((value: number) => [`${value.toFixed(1)}%`, 'Lift vs Historical']) as never}
               />
               <Bar dataKey="lift" fill={CHART_COLORS.SECONDARY} radius={[4, 4, 0, 0]} isAnimationActive={false} />
             </RechartsBarChart>
@@ -421,7 +421,7 @@ export function Backtesting() {
               />
               <RechartsTooltip
                 contentStyle={tooltipStyle}
-                formatter={(value: number) => [`${value.toFixed(1)}%`, 'Lift vs Historical']}
+                formatter={((value: number) => [`${value.toFixed(1)}%`, 'Lift vs Historical']) as never}
               />
               <Bar dataKey="lift" fill="#8b5cf6" radius={[4, 4, 0, 0]} isAnimationActive={false} />
             </RechartsBarChart>
@@ -444,7 +444,7 @@ export function Backtesting() {
                   />
                   <RechartsTooltip
                     contentStyle={tooltipStyle}
-                    formatter={(value: number) => [`${value.toFixed(1)}%`, 'Lift vs Historical']}
+                    formatter={((value: number) => [`${value.toFixed(1)}%`, 'Lift vs Historical']) as never}
                   />
                   <Bar dataKey="lift" fill="#f59e0b" radius={[4, 4, 0, 0]} isAnimationActive={false} />
                 </RechartsBarChart>
@@ -465,7 +465,7 @@ export function Backtesting() {
                   />
                   <RechartsTooltip
                     contentStyle={tooltipStyle}
-                    formatter={(value: number) => [`${value.toFixed(1)}%`, 'Lift vs Historical']}
+                    formatter={((value: number) => [`${value.toFixed(1)}%`, 'Lift vs Historical']) as never}
                   />
                   <Bar dataKey="lift" fill="#06b6d4" radius={[4, 4, 0, 0]} isAnimationActive={false} />
                 </RechartsBarChart>
