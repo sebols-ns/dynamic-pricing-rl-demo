@@ -346,7 +346,7 @@ export function RlTraining({ training }: RlTrainingProps) {
               <ResponsiveContainer width="100%" height={280}>
                 <RechartsLineChart data={chartData} margin={{ top: 8, right: 16, left: 8, bottom: 24 }}>
                   <CartesianGrid strokeDasharray="3 3" stroke="var(--color-neutral-200)" />
-                  <XAxis dataKey="episode" tick={{ fontSize: 11 }} interval="preserveStartEnd" label={{ value: 'Episode', position: 'insideBottom', offset: -12, fontSize: 12 }} />
+                  <XAxis dataKey="episode" type="number" domain={['dataMin', 'dataMax']} tick={{ fontSize: 11 }} label={{ value: 'Episode', position: 'insideBottom', offset: -12, fontSize: 12 }} />
                   <YAxis domain={['auto', 'auto']} tick={{ fontSize: 11 }} label={{ value: 'Avg Reward', angle: -90, position: 'insideLeft', offset: 4, fontSize: 12 }} />
                   <RechartsTooltip />
                   <Line type="monotone" dataKey="smoothReward" stroke={getSeriesColor(0)} strokeWidth={2} dot={false} activeDot={false} />
@@ -373,7 +373,7 @@ export function RlTraining({ training }: RlTrainingProps) {
               <ResponsiveContainer width="100%" height={280}>
                 <RechartsLineChart data={revenueChartData} margin={{ top: 8, right: 16, left: 16, bottom: 24 }}>
                   <CartesianGrid strokeDasharray="3 3" stroke="var(--color-neutral-200)" />
-                  <XAxis dataKey="episode" tick={{ fontSize: 11 }} interval="preserveStartEnd" label={{ value: 'Episode', position: 'insideBottom', offset: -12, fontSize: 12 }} />
+                  <XAxis dataKey="episode" type="number" domain={['dataMin', 'dataMax']} tick={{ fontSize: 11 }} label={{ value: 'Episode', position: 'insideBottom', offset: -12, fontSize: 12 }} />
                   <YAxis domain={['auto', 'auto']} tick={{ fontSize: 11 }} label={{ value: 'Avg Revenue ($)', angle: -90, position: 'insideLeft', offset: 0, fontSize: 12 }} />
                   <RechartsTooltip formatter={(value: number) => `$${value.toLocaleString()}`} />
                   <Line type="monotone" dataKey="revenue" stroke={CHART_COLORS.SUCCESS} strokeWidth={2} dot={false} activeDot={false} name="RL Agent" />

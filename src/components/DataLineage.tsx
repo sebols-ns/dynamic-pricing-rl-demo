@@ -33,7 +33,7 @@ const NODES: Node[] = [
   { id: 'lag_bin', label: 'lagPriceBin', x: 180, y: 165, color: 'var(--color-warning)', width: 100 },
 
   // Column 3: Q-table
-  { id: 'qtable', label: 'Q-Table\n500×10', x: 360, y: 90, color: 'var(--color-primary)', width: 90 },
+  { id: 'qtable', label: 'Q-Table\n108×12', x: 360, y: 90, color: 'var(--color-primary)', width: 90 },
 
   // Column 4: Output
   { id: 'price', label: 'Rec. Price', x: 510, y: 90, color: 'var(--color-success)', width: 90 },

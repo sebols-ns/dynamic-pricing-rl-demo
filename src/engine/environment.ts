@@ -108,6 +108,27 @@ export class PricingEnvironment {
     return { demandBin, competitorPriceBin, seasonBin, lagPriceBin };
   }
 
+  /**
+   * State-dependent elasticity: market conditions modulate price sensitivity.
+   * - Low demand → customers more price-sensitive (higher elasticity)
+   * - High competitor prices → customers less price-sensitive (lower elasticity)
+   * - Summer/winter seasonality effects
+   * This ensures different states have different optimal prices.
+   */
+  private getEffectiveElasticity(state: State): number {
+    // Base elasticity from data
+    let e = this.elasticity;
+    // Low demand (bin 0) → 1.6x elasticity; high demand (bin 2) → 0.6x
+    const demandFactor = 1.6 - (state.demandBin / (DEMAND_BINS - 1)) * 1.0;
+    // Lower competitor prices (bin 0) → customers more sensitive (1.4x); higher (bin 2) → less (0.7x)
+    const compFactor = 1.4 - (state.competitorPriceBin / (COMPETITOR_BINS - 1)) * 0.7;
+    // Summer (bin 2) slightly less elastic, winter (bin 0) slightly more
+    const seasonFactor = state.seasonBin === 2 ? 0.85 : state.seasonBin === 0 ? 1.15 : 1.0;
+    e *= demandFactor * compFactor * seasonFactor;
+    // Clamp to reasonable range
+    return Math.min(2.0, Math.max(0.1, e));
+  }
+
   reset(): State {
     this.currentIdx = Math.floor(Math.random() * this.rows.length);
     return this.getState(this.rows[this.currentIdx]);
@@ -115,12 +136,14 @@ export class PricingEnvironment {
 
   step(action: number): StepResult {
     const row = this.rows[this.currentIdx];
+    const state = this.getState(row);
     const multiplier = ACTION_MULTIPLIERS[action];
     const price = this.basePrice * multiplier;
 
-    // Log-linear demand model
+    // Log-linear demand model with state-dependent elasticity
+    const effectiveElasticity = this.getEffectiveElasticity(state);
     const priceChangeRatio = (price - this.basePrice) / (this.basePrice || 1);
-    const predictedQty = Math.max(1, row.qty * Math.exp(-this.elasticity * priceChangeRatio));
+    const predictedQty = Math.max(1, row.qty * Math.exp(-effectiveElasticity * priceChangeRatio));
 
     const revenue = price * predictedQty;
     const margin = (price - this.baseCost) * predictedQty;
@@ -174,8 +197,9 @@ export class PricingEnvironment {
     // Scale baseQty by demand bin (higher bin = higher demand)
     const demandFactor = overrides?.demandMultiplier ?? (0.5 + state.demandBin * 0.3);
     const baseQ = this.baseQty * demandFactor;
+    const effectiveElasticity = this.getEffectiveElasticity(state);
     const priceChangeRatio = (price - this.basePrice) / (this.basePrice || 1);
-    const predictedQty = Math.max(1, baseQ * Math.exp(-this.elasticity * priceChangeRatio));
+    const predictedQty = Math.max(1, baseQ * Math.exp(-effectiveElasticity * priceChangeRatio));
 
     const revenue = price * predictedQty;
     const margin = (price - this.baseCost) * predictedQty;
