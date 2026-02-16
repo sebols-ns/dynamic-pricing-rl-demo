@@ -3,6 +3,7 @@ import type { RetailRow, ProductSummary } from '../types/data';
 import { parseCsv } from '../utils/csv-parser';
 import { adaptInventoryRows } from '../utils/inventory-adapter';
 import { mean } from '../utils/math';
+import { splitTemporalData, type TrainTestSplit } from '../utils/data-split';
 import Papa from 'papaparse';
 
 export type DatasetName = 'retail_price' | 'store_inventory';
@@ -15,6 +16,7 @@ interface CsvDataState {
   isLoading: boolean;
   error: string | null;
   datasetName: DatasetName;
+  trainTestSplit: TrainTestSplit | null;
   loadFromFile: (file: File) => Promise<void>;
   loadSampleData: () => Promise<void>;
   loadInventoryData: () => Promise<void>;
@@ -28,6 +30,7 @@ const defaultState: CsvDataState = {
   isLoading: false,
   error: null,
   datasetName: 'retail_price',
+  trainTestSplit: null,
   loadFromFile: async () => {},
   loadSampleData: async () => {},
   loadInventoryData: async () => {},
@@ -47,9 +50,11 @@ export function useCsvDataProvider(): CsvDataState {
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [datasetName, setDatasetName] = useState<DatasetName>('retail_price');
+  const [trainTestSplit, setTrainTestSplit] = useState<TrainTestSplit | null>(null);
 
   const processRows = useCallback((parsed: RetailRow[]) => {
     setRows(parsed);
+    setTrainTestSplit(splitTemporalData(parsed));
 
     const productMap = new Map<string, RetailRow[]>();
     for (const row of parsed) {
@@ -130,5 +135,5 @@ export function useCsvDataProvider(): CsvDataState {
     }
   }, [processRows]);
 
-  return { rows, products, categories, isLoaded, isLoading, error, datasetName, loadFromFile, loadSampleData, loadInventoryData };
+  return { rows, products, categories, isLoaded, isLoading, error, datasetName, trainTestSplit, loadFromFile, loadSampleData, loadInventoryData };
 }

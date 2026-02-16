@@ -170,7 +170,7 @@ function App() {
                   <TabsTrigger value="data">Data Explorer</TabsTrigger>
                   <TabsTrigger value="training">RL Training</TabsTrigger>
                   <TabsTrigger value="pricing-lab">Pricing Lab</TabsTrigger>
-                  <TabsTrigger value="backtesting">Backtesting</TabsTrigger>
+                  <TabsTrigger value="backtesting">Validation</TabsTrigger>
                   <TabsTrigger value="explainability">Explainability</TabsTrigger>
                   <TabsTrigger value="learn">Learn</TabsTrigger>
                 </TabsList>

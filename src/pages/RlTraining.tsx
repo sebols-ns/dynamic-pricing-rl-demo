@@ -12,6 +12,7 @@ import {
 import { useCsvData } from '../hooks/useCsvData';
 import type { useRlTraining } from '../hooks/useRlTraining';
 import { useTrainedAgent } from '../hooks/useTrainedAgent';
+import { getTrainRows } from '../utils/data-split';
 import { QTableHeatmap } from '../components/QTableHeatmap';
 import { MetricCard } from '../components/MetricCard';
 import type { RewardWeights } from '../types/rl';
@@ -55,15 +56,18 @@ function RlTerm({ term, definition, children }: { term: string; definition: stri
 }
 
 export function RlTraining({ training }: RlTrainingProps) {
-  const { rows, products, isLoaded } = useCsvData();
+  const { rows, products, isLoaded, trainTestSplit } = useCsvData();
   const trainedCtx = useTrainedAgent();
   const [selectedProduct, setSelectedProduct] = useState<string>('');
   const [speed, setSpeed] = useState(1);
   const [weights] = useState<RewardWeights>({ revenue: 0.4, margin: 0.4, volume: 0.2 });
 
   useEffect(() => {
-    if (selectedProduct && isLoaded) {
-      const productRows = rows.filter(r => r.product_id === selectedProduct);
+    if (selectedProduct && isLoaded && trainTestSplit) {
+      const productRows = getTrainRows(
+        rows.filter(r => r.product_id === selectedProduct),
+        trainTestSplit.splitDate,
+      );
       if (productRows.length > 0) {
         training.initialize(productRows, weights);
       }
@@ -188,6 +192,21 @@ export function RlTraining({ training }: RlTrainingProps) {
           <Badge variant="neutral">1,296 Q-values</Badge>
         </div>
       </div>
+
+      {/* Train/Test Split Info */}
+      {trainTestSplit && (
+        <div style={{ ...cardStyle, backgroundColor: 'var(--color-success-subtle)', borderColor: 'var(--color-green-200)', marginBottom: '24px' }}>
+          <div className="flex items-center" style={{ gap: '8px', marginBottom: '8px' }}>
+            <Typography variant="heading-sm">Train / Test Split</Typography>
+            <Badge variant="primary">{trainTestSplit.trainMonths} train months</Badge>
+            <Badge variant="neutral">{trainTestSplit.testMonths} test months held out</Badge>
+          </div>
+          <Typography variant="body-sm" style={{ color: 'var(--color-secondary)' }}>
+            Training uses data from <strong>{trainTestSplit.trainDateRange}</strong> only.
+            The remaining <strong>{trainTestSplit.testDateRange}</strong> is held out for out-of-sample evaluation in the Validation tab.
+          </Typography>
+        </div>
+      )}
 
       {/* Data Pipeline */}
       <div style={{ ...cardStyle, marginBottom: '24px' }}>

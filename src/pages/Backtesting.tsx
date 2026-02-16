@@ -11,6 +11,7 @@ import { useCsvData } from '../hooks/useCsvData';
 import { useTrainedAgent } from '../hooks/useTrainedAgent';
 import { MetricCard } from '../components/MetricCard';
 import { computeBacktest } from '../utils/backtesting';
+import { getTestRows } from '../utils/data-split';
 import { DEMAND_BINS, COMPETITOR_BINS, INVENTORY_BINS, FORECAST_BINS } from '../types/rl';
 
 const cardStyle: React.CSSProperties = {
@@ -38,14 +39,17 @@ function formatPct(v: number): string {
 }
 
 export function Backtesting() {
-  const { rows, isLoaded, datasetName } = useCsvData();
+  const { rows, isLoaded, datasetName, trainTestSplit } = useCsvData();
   const { agent, env, isTrained, productId: trainedProductId, episode } = useTrainedAgent();
 
-  // Only backtest the trained product — the agent/env are calibrated for it
+  // Only backtest the trained product on held-out test data
   const productRows = useMemo(() => {
-    if (!isLoaded || !trainedProductId) return [];
-    return rows.filter(r => r.product_id === trainedProductId);
-  }, [rows, isLoaded, trainedProductId]);
+    if (!isLoaded || !trainedProductId || !trainTestSplit) return [];
+    return getTestRows(
+      rows.filter(r => r.product_id === trainedProductId),
+      trainTestSplit.splitDate,
+    );
+  }, [rows, isLoaded, trainedProductId, trainTestSplit]);
 
   const summary = useMemo(() => {
     if (!agent || !env || !isTrained || productRows.length === 0) return null;
@@ -162,7 +166,7 @@ export function Backtesting() {
   if (!isLoaded) {
     return (
       <div style={{ padding: '32px 0' }}>
-        <Typography variant="heading-lg">Backtesting</Typography>
+        <Typography variant="heading-lg">Validation</Typography>
         <Typography variant="body-md" style={{ color: 'var(--color-secondary)', marginTop: '8px' }}>
           Load a dataset in the Data Explorer tab to begin.
         </Typography>
@@ -173,10 +177,10 @@ export function Backtesting() {
   if (!isTrained) {
     return (
       <div style={{ padding: '32px 0' }}>
-        <Typography variant="heading-lg">Backtesting</Typography>
+        <Typography variant="heading-lg">Validation</Typography>
         <Typography variant="body-md" style={{ color: 'var(--color-secondary)', marginTop: '8px' }}>
-          Train an RL agent in the Training tab first. The backtest will replay historical data through
-          the trained agent to show what prices it would have recommended.
+          Train an RL agent in the Training tab first. The validation will replay held-out test data through
+          the trained agent to evaluate out-of-sample performance.
         </Typography>
       </div>
     );
@@ -185,9 +189,10 @@ export function Backtesting() {
   if (!summary) {
     return (
       <div style={{ padding: '32px 0' }}>
-        <Typography variant="heading-lg">Backtesting</Typography>
+        <Typography variant="heading-lg">Validation</Typography>
         <Typography variant="body-md" style={{ color: 'var(--color-secondary)', marginTop: '8px' }}>
-          No data available for product {trainedProductId}.
+          No test data available for product {trainedProductId}.
+          {trainTestSplit && <> The test period ({trainTestSplit.testDateRange}) contains no rows for this product.</>}
         </Typography>
       </div>
     );
@@ -200,9 +205,9 @@ export function Backtesting() {
       {/* Header */}
       <div className="flex items-center justify-between" style={{ marginBottom: '8px' }}>
         <div>
-          <Typography variant="heading-lg">Backtesting</Typography>
+          <Typography variant="heading-lg">Validation</Typography>
           <Typography variant="body-md" style={{ color: 'var(--color-secondary)', marginTop: '4px' }}>
-            RL agent vs. historical pricing — replayed across {productRows.length.toLocaleString()} historical rows for product {trainedProductId}.
+            Out-of-sample evaluation on held-out test data — {productRows.length.toLocaleString()} rows for product {trainedProductId}.
           </Typography>
         </div>
         <div className="flex items-center" style={{ gap: '8px' }}>
@@ -212,20 +217,22 @@ export function Backtesting() {
         </div>
       </div>
 
-      {/* Explanation */}
-      <div style={{
-        border: '1px solid var(--color-blue-200)',
-        borderRadius: '8px',
-        padding: '12px 16px',
-        backgroundColor: 'var(--color-info-subtle)',
-        marginBottom: '24px',
-      }}>
-        <Typography variant="body-sm" style={{ color: 'var(--color-secondary)' }}>
-          Both strategies use the same demand model. <strong>Historical</strong> represents the baseline 1.00x pricing
-          (${ env!.getBasePrice().toFixed(2) }). <strong>RL</strong> adapts per market state. This is an apples-to-apples
-          comparison — the only difference is pricing strategy.
-        </Typography>
-      </div>
+      {/* Train/Test Split Info */}
+      {trainTestSplit && (
+        <div style={{ ...cardStyle, backgroundColor: 'var(--color-success-subtle)', borderColor: 'var(--color-green-200)', marginBottom: '24px' }}>
+          <div className="flex items-center" style={{ gap: '8px', marginBottom: '8px' }}>
+            <Typography variant="heading-sm">Train / Test Split</Typography>
+            <Badge variant="primary">{trainTestSplit.trainMonths} train months</Badge>
+            <Badge variant="accent">{trainTestSplit.testMonths} test months</Badge>
+          </div>
+          <Typography variant="body-sm" style={{ color: 'var(--color-secondary)' }}>
+            The agent was trained on <strong>{trainTestSplit.trainDateRange}</strong> and is evaluated here
+            on <strong>{trainTestSplit.testDateRange}</strong> — data it has never seen.
+            <strong> Historical</strong> represents the baseline 1.00x pricing (${env!.getBasePrice().toFixed(2)}).
+            <strong> RL</strong> adapts per market state. This is an honest out-of-sample comparison.
+          </Typography>
+        </div>
+      )}
 
       {/* KPI Cards */}
       <div
