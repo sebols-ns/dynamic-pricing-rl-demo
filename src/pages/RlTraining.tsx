@@ -381,7 +381,7 @@ export function RlTraining({ training }: RlTrainingProps) {
                   <CartesianGrid strokeDasharray="3 3" stroke="var(--color-neutral-200)" />
                   <XAxis dataKey="episode" type="number" domain={chartXDomain} tick={{ fontSize: 11 }} label={{ value: 'Episode', position: 'insideBottom', offset: -12, fontSize: 12 }} />
                   <YAxis domain={['auto', 'auto']} tick={{ fontSize: 11 }} label={{ value: 'Avg Revenue ($)', angle: -90, position: 'insideLeft', offset: 0, fontSize: 12 }} />
-                  <RechartsTooltip formatter={(value: number) => `$${value.toLocaleString()}`} />
+                  <RechartsTooltip formatter={((value: number) => `$${value.toLocaleString()}`) as any} />
                   <Line type="monotone" dataKey="revenue" stroke={CHART_COLORS.SUCCESS} strokeWidth={2} dot={false} activeDot={false} isAnimationActive={false} name="RL Agent" />
                   <Line type="monotone" dataKey="staticRevenue" stroke="var(--color-neutral-400)" strokeWidth={2} strokeDasharray="6 4" dot={false} activeDot={false} isAnimationActive={false} name="Static (1.0x)" />
                 </RechartsLineChart>

@@ -1,7 +1,6 @@
 import { useState, useRef, useCallback } from 'react';
 import type { EpisodeResult, RewardWeights, TrainingConfig } from '../types/rl';
 import type { RetailRow } from '../types/data';
-import { DEFAULT_CONFIG } from '../types/rl';
 import { PricingEnvironment } from '../engine/environment';
 import { QLearningAgent } from '../engine/q-learning';
 

@@ -345,9 +345,9 @@ export function PricingLab() {
                       <CartesianGrid strokeDasharray="3 3" stroke="var(--color-neutral-200)" />
                       <XAxis dataKey="strategy" tick={{ fontSize: 12 }} />
                       <YAxis domain={[yMin, yMax]} tick={{ fontSize: 11 }} label={{ value: chart.label, angle: -90, position: 'insideLeft', offset: 4, fontSize: 12 }} />
-                      <RechartsTooltip formatter={(value: number) => `$${value.toLocaleString()}`} />
+                      <RechartsTooltip formatter={((value: number) => `$${value.toLocaleString()}`) as any} />
                       <Bar dataKey="value" radius={[4, 4, 0, 0]}>
-                        <LabelList dataKey="value" position="top" fontSize={12} formatter={(v: number) => `$${v.toLocaleString()}`} />
+                        <LabelList dataKey="value" position="top" fontSize={12} formatter={((v: number) => `$${v.toLocaleString()}`) as any} />
                         {chart.data.map((_, i) => (
                           <Cell key={i} fill={barColors[i]} />
                         ))}
@@ -400,9 +400,9 @@ export function PricingLab() {
                           <CartesianGrid strokeDasharray="3 3" stroke="var(--color-neutral-200)" />
                           <XAxis dataKey="strategy" tick={{ fontSize: 12 }} />
                           <YAxis domain={[yMin, yMax]} tick={{ fontSize: 11 }} label={{ value: chart.label, angle: -90, position: 'insideLeft', offset: 4, fontSize: 12 }} />
-                          <RechartsTooltip formatter={(value: number) => `$${value.toLocaleString()}`} />
+                          <RechartsTooltip formatter={((value: number) => `$${value.toLocaleString()}`) as any} />
                           <Bar dataKey="value" radius={[4, 4, 0, 0]}>
-                            <LabelList dataKey="value" position="top" fontSize={12} formatter={(v: number) => `$${v.toLocaleString()}`} />
+                            <LabelList dataKey="value" position="top" fontSize={12} formatter={((v: number) => `$${v.toLocaleString()}`) as any} />
                             {chart.data.map((_, i) => (
                               <Cell key={i} fill={barColors[i]} />
                             ))}
