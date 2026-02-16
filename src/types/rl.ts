@@ -30,9 +30,9 @@ export const DEFAULT_CONFIG: TrainingConfig = {
   discountFactor: 0.0, // Contextual bandit: pricing decisions are independent
   epsilonStart: 1.0,
   epsilonEnd: 0.01,
-  epsilonDecay: 0.997,
-  episodes: 5000,
-  earlyStopPatience: 300,
+  epsilonDecay: 0.9975,
+  episodes: 8000,
+  earlyStopPatience: 400,
   earlyStopThreshold: 0.002,
 };
 

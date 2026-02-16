@@ -77,20 +77,40 @@ export class QLearningAgent {
     let totalMargin = 0;
     let explorationCount = 0;
 
+    // Synthetic exploration ratio: 30% of steps use synthetic data for states
+    // not present in training data. This ensures all 108 states get coverage.
+    const syntheticRatio = 0.3;
+
     for (let step = 0; step < stepsPerEpisode; step++) {
-      const { action, isExploration } = this.selectAction(stateIndex);
-      if (isExploration) explorationCount++;
+      if (Math.random() < syntheticRatio) {
+        // Synthetic step: explore a random state using the demand model
+        const synState = env.randomState();
+        const synStateIndex = env.stateToIndex(synState);
+        const { action, isExploration } = this.selectAction(synStateIndex);
+        if (isExploration) explorationCount++;
 
-      const result = env.step(action);
-      const nextStateIndex = env.stateToIndex(result.nextState);
+        const synResult = env.syntheticStep(synState, action);
+        const nextSynIndex = env.stateToIndex(synResult.nextState);
+        this.update(synStateIndex, action, synResult.reward, nextSynIndex);
 
-      this.update(stateIndex, action, result.reward, nextStateIndex);
+        totalReward += synResult.reward;
+        totalRevenue += synResult.revenue;
+        totalMargin += synResult.margin;
+      } else {
+        // Real data step
+        const { action, isExploration } = this.selectAction(stateIndex);
+        if (isExploration) explorationCount++;
 
-      state = result.nextState;
-      stateIndex = nextStateIndex;
-      totalReward += result.reward;
-      totalRevenue += result.revenue;
-      totalMargin += result.margin;
+        const result = env.step(action);
+        const nextStateIndex = env.stateToIndex(result.nextState);
+        this.update(stateIndex, action, result.reward, nextStateIndex);
+
+        state = result.nextState;
+        stateIndex = nextStateIndex;
+        totalReward += result.reward;
+        totalRevenue += result.revenue;
+        totalMargin += result.margin;
+      }
     }
 
     this.decayEpsilon();

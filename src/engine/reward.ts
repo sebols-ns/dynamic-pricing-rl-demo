@@ -21,9 +21,12 @@ export function computeReward(
 ): number {
   const normRevenue = normalize(inputs.revenue, revenueRange.min, revenueRange.max);
   const normMargin = normalize(inputs.margin, marginRange.min, marginRange.max);
-  // Cap volume at 1.0 (baseline) — penalize losing volume but don't reward gaining it
-  // This prevents the agent from always discounting to chase volume
-  const normVolume = Math.min(1.0, normalize(inputs.volume, volumeRange.min, volumeRange.max));
+  // Threshold-based volume: full credit if volume stays above 40% of range,
+  // linear penalty only for extreme volume loss. This prevents the volume component
+  // from fighting against revenue/margin for moderate price increases.
+  const rawVolume = normalize(inputs.volume, volumeRange.min, volumeRange.max);
+  const volumeThreshold = 0.35;
+  const normVolume = rawVolume >= volumeThreshold ? 1.0 : rawVolume / volumeThreshold;
 
   return (
     weights.revenue * normRevenue +

@@ -59,18 +59,18 @@ export class PricingEnvironment {
     //   Tough states (low demand, cheap competitors): e ≈ 2.6 → prefers 0.80–1.00x
     this.elasticity = 0.7;
 
-    // Precompute normalization ranges — tighter ranges give better reward gradient
-    const minMult = ACTION_MULTIPLIERS[0];
-    const maxMult = ACTION_MULTIPLIERS[ACTION_MULTIPLIERS.length - 1];
+    // Normalization ranges — use the middle of the action range (0.95x–1.30x) to
+    // create tighter ranges with better reward gradient. Extreme actions naturally
+    // clip outside [0,1] which is fine — it just means they get min/max reward.
     this.revenueRange = {
-      min: this.basePrice * minMult * this.baseQty * 0.5,
-      max: this.basePrice * maxMult * this.baseQty * 1.2,
+      min: this.basePrice * 0.95 * this.baseQty * 0.6,
+      max: this.basePrice * 1.30 * this.baseQty * 1.1,
     };
     this.marginRange = {
-      min: (this.basePrice * minMult - this.baseCost) * this.baseQty * 0.5,
-      max: (this.basePrice * maxMult - this.baseCost) * this.baseQty * 1.2,
+      min: (this.basePrice * 0.95 - this.baseCost) * this.baseQty * 0.6,
+      max: (this.basePrice * 1.30 - this.baseCost) * this.baseQty * 1.1,
     };
-    this.volumeRange = { min: this.baseQty * 0.4, max: this.baseQty * 1.5 };
+    this.volumeRange = { min: this.baseQty * 0.3, max: this.baseQty * 1.2 };
   }
 
   getState(row: RetailRow): State {
@@ -189,6 +189,45 @@ export class PricingEnvironment {
     return NUM_ACTIONS;
   }
 
+  /** Generate a random state for synthetic exploration during training */
+  randomState(): State {
+    return {
+      demandBin: Math.floor(Math.random() * DEMAND_BINS),
+      competitorPriceBin: Math.floor(Math.random() * COMPETITOR_BINS),
+      seasonBin: Math.floor(Math.random() * SEASON_BINS),
+      lagPriceBin: Math.floor(Math.random() * LAG_PRICE_BINS),
+    };
+  }
+
+  /** Synthetic step using the demand model (not real data rows).
+   *  Ensures the agent can learn Q-values for states absent from the training data. */
+  syntheticStep(state: State, action: number): StepResult {
+    const multiplier = ACTION_MULTIPLIERS[action];
+    const price = this.basePrice * multiplier;
+    // Scale base quantity by demand bin: low=0.6, med=0.85, high=1.1
+    const demandScale = 0.6 + (state.demandBin / (DEMAND_BINS - 1)) * 0.5;
+    const baseQ = this.baseQty * demandScale;
+    const effectiveElasticity = this.getEffectiveElasticity(state);
+    const priceChangeRatio = (price - this.basePrice) / (this.basePrice || 1);
+    // Add small noise (±10%) to prevent deterministic Q-values
+    const noise = 0.9 + Math.random() * 0.2;
+    const predictedQty = Math.max(1, baseQ * Math.exp(-effectiveElasticity * priceChangeRatio) * noise);
+
+    const revenue = price * predictedQty;
+    const margin = (price - this.baseCost) * predictedQty;
+    const volumeSold = predictedQty;
+
+    const reward = computeReward(
+      { revenue, margin, volume: volumeSold },
+      this.weights,
+      this.revenueRange,
+      this.marginRange,
+      this.volumeRange,
+    );
+
+    return { nextState: this.randomState(), reward, price, revenue, margin, volumeSold };
+  }
+
   simulateAction(state: State, action: number, overrides?: {
     demandMultiplier?: number;
     competitorPrice?: number;
@@ -198,10 +237,9 @@ export class PricingEnvironment {
     const multiplier = ACTION_MULTIPLIERS[action];
     const price = this.basePrice * multiplier;
 
-    // Use the same demand model as step() for consistency
-    // Scale baseQty by demand bin (higher bin = higher demand)
-    const demandFactor = overrides?.demandMultiplier ?? (0.5 + state.demandBin * 0.3);
-    const baseQ = this.baseQty * demandFactor;
+    // Same demand model as syntheticStep() so training matches evaluation
+    const demandScale = overrides?.demandMultiplier ?? (0.6 + (state.demandBin / (DEMAND_BINS - 1)) * 0.5);
+    const baseQ = this.baseQty * demandScale;
     const effectiveElasticity = this.getEffectiveElasticity(state);
     const priceChangeRatio = (price - this.basePrice) / (this.basePrice || 1);
     const predictedQty = Math.max(1, baseQ * Math.exp(-effectiveElasticity * priceChangeRatio));
