@@ -43,6 +43,13 @@ export function clamp(value: number, min: number, max: number): number {
   return Math.max(min, Math.min(max, value));
 }
 
+/** Compare "YYYY-M" or "YYYY-MM" date strings chronologically. */
+export function compareMonthYear(a: string, b: string): number {
+  const [ay, am] = a.split('-').map(Number);
+  const [by, bm] = b.split('-').map(Number);
+  return (ay - by) || (am - bm);
+}
+
 export function factorial(n: number): number {
   if (n <= 1) return 1;
   let result = 1;

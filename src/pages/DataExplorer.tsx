@@ -20,6 +20,7 @@ import { useCsvData } from '../hooks/useCsvData';
 import type { DatasetName } from '../hooks/useCsvData';
 import { MetricCard } from '../components/MetricCard';
 import type { RetailRow } from '../types/data';
+import { compareMonthYear } from '../utils/math';
 
 const columnHelper = createColumnHelper<RetailRow>();
 
@@ -112,7 +113,7 @@ export function DataExplorer() {
       entry.total += row.unit_price;
       entry.count++;
     }
-    const sorted = [...byDate.entries()].sort(([a], [b]) => a.localeCompare(b));
+    const sorted = [...byDate.entries()].sort(([a], [b]) => compareMonthYear(a, b));
 
     // Downsample if too many points — show max ~30 for clean x-axis
     const maxPoints = 30;
@@ -134,7 +135,7 @@ export function DataExplorer() {
 
   const dateRange = useMemo(() => {
     if (!isLoaded || rows.length === 0) return 'N/A';
-    const dates = rows.map(r => r.month_year).filter(Boolean).sort();
+    const dates = rows.map(r => r.month_year).filter(Boolean).sort(compareMonthYear);
     return `${dates[0]} — ${dates[dates.length - 1]}`;
   }, [rows, isLoaded]);
 

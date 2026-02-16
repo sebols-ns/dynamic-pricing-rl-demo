@@ -3,6 +3,7 @@ import type { State } from '../types/rl';
 import { ACTION_MULTIPLIERS } from '../types/rl';
 import type { QLearningAgent } from '../engine/q-learning';
 import type { PricingEnvironment } from '../engine/environment';
+import { compareMonthYear } from './math';
 
 export interface BacktestRow {
   date: string;
@@ -141,7 +142,7 @@ export function computeBacktest(
     m.count++;
   }
 
-  const sortedMonths = [...monthMap.entries()].sort(([a], [b]) => a.localeCompare(b));
+  const sortedMonths = [...monthMap.entries()].sort(([a], [b]) => compareMonthYear(a, b));
   let cumStatic = 0;
   let cumRl = 0;
   const monthly: MonthlyAggregate[] = sortedMonths.map(([date, m]) => {
