@@ -6,8 +6,8 @@ export interface RetailRow {
   total_price: number;
   freight_price: number;
   unit_price: number;
-  product_name_length: number;
-  product_description_length: number;
+  product_name_lenght: number;   // typo in original Kaggle dataset
+  product_description_lenght: number; // typo in original Kaggle dataset
   product_photos_qty: number;
   product_weight_g: number;
   product_score: number;
@@ -20,13 +20,13 @@ export interface RetailRow {
   s: number;
   volume: number;
   comp_1: number;
-  comp_2: number;
-  comp_3: number;
   ps1: number;
-  ps2: number;
-  ps3: number;
   fp1: number;
+  comp_2: number;
+  ps2: number;
   fp2: number;
+  comp_3: number;
+  ps3: number;
   fp3: number;
   lag_price: number;
 }

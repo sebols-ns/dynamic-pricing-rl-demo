@@ -3,7 +3,7 @@ import type { RetailRow } from '../types/data';
 
 const NUMERIC_FIELDS: (keyof RetailRow)[] = [
   'qty', 'total_price', 'freight_price', 'unit_price',
-  'product_name_length', 'product_description_length', 'product_photos_qty',
+  'product_name_lenght', 'product_description_lenght', 'product_photos_qty',
   'product_weight_g', 'product_score', 'customers',
   'weekday', 'weekend', 'holiday', 'month', 'year', 's', 'volume',
   'comp_1', 'comp_2', 'comp_3', 'ps1', 'ps2', 'ps3',
