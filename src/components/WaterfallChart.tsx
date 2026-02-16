@@ -11,7 +11,7 @@ interface WaterfallChartProps {
 export function WaterfallChart({ shapValues, basePrice, finalPrice, className }: WaterfallChartProps) {
   const sorted = [...shapValues].sort((a, b) => Math.abs(b.value) - Math.abs(a.value));
 
-  // Calculate bounds for scaling
+  // Calculate bounds for scaling — tight range around actual values, never from 0
   const allPrices: number[] = [basePrice];
   let running = basePrice;
   for (const sv of sorted) {
@@ -19,8 +19,11 @@ export function WaterfallChart({ shapValues, basePrice, finalPrice, className }:
     allPrices.push(running);
   }
   allPrices.push(finalPrice);
-  const minPrice = Math.min(...allPrices) - 1;
-  const maxPrice = Math.max(...allPrices) + 1;
+  const priceMin = Math.min(...allPrices);
+  const priceMax = Math.max(...allPrices);
+  const padding = Math.max(1, (priceMax - priceMin) * 0.15);
+  const minPrice = priceMin - padding;
+  const maxPrice = priceMax + padding;
 
   const chartWidth = 500;
   const chartHeight = (sorted.length + 2) * 48 + 20;
@@ -44,9 +47,9 @@ export function WaterfallChart({ shapValues, basePrice, finalPrice, className }:
           Base Price
         </text>
         <rect
-          x={xScale(Math.min(basePrice, 0))}
+          x={xScale(basePrice) - 4}
           y={14}
-          width={Math.max(2, xScale(basePrice) - xScale(Math.min(basePrice, 0)))}
+          width={8}
           height={barHeight}
           rx={4}
           fill="var(--color-interactive)"
@@ -124,9 +127,9 @@ export function WaterfallChart({ shapValues, basePrice, finalPrice, className }:
                 Final Price
               </text>
               <rect
-                x={xScale(Math.min(finalPrice, 0))}
+                x={xScale(finalPrice) - 4}
                 y={y}
-                width={Math.max(2, xScale(finalPrice) - xScale(Math.min(finalPrice, 0)))}
+                width={8}
                 height={barHeight}
                 rx={4}
                 fill="var(--color-primary)"

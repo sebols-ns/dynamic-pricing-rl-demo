@@ -59,7 +59,7 @@ export function useCsvDataProvider(): CsvDataState {
         rowCount: pRows.length,
       });
     }
-    summaries.sort((a, b) => b.rowCount - a.rowCount);
+    summaries.sort((a, b) => a.id.localeCompare(b.id));
     setProducts(summaries);
 
     const cats = [...new Set(parsed.map(r => r.product_category_name))].sort();

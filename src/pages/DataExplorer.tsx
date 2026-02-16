@@ -1,6 +1,7 @@
 import { useCallback, useMemo, useState } from 'react';
 import {
   Typography, Button, BarChart, LineChart, Table, Badge,
+  Select, SelectTrigger, SelectValue, SelectContent, SelectItem,
   CHART_COLORS, getSeriesColor,
 } from '@northslopetech/altitude-ui';
 import {
@@ -43,9 +44,23 @@ const columns = [
 export function DataExplorer() {
   const { rows, products, categories, isLoaded, isLoading, error, loadFromFile, loadSampleData } = useCsvData();
   const [sorting, setSorting] = useState<SortingState>([]);
+  const [chartProduct, setChartProduct] = useState<string>('all');
+  const [tableProduct, setTableProduct] = useState<string>('all');
+
+  // Filtered rows for charts
+  const chartRows = useMemo(() => {
+    if (chartProduct === 'all') return rows;
+    return rows.filter(r => r.product_id === chartProduct);
+  }, [rows, chartProduct]);
+
+  // Filtered rows for table
+  const tableRows = useMemo(() => {
+    if (tableProduct === 'all') return rows;
+    return rows.filter(r => r.product_id === tableProduct);
+  }, [rows, tableProduct]);
 
   const table = useReactTable({
-    data: rows,
+    data: tableRows,
     columns,
     state: { sorting },
     onSortingChange: setSorting,
@@ -68,40 +83,81 @@ export function DataExplorer() {
   }, [loadFromFile]);
 
   const priceDistribution = useMemo(() => {
-    if (!isLoaded) return [];
+    if (!isLoaded || chartRows.length === 0) return [];
     const buckets: Record<string, number> = {};
-    for (const row of rows) {
+    for (const row of chartRows) {
       const bucket = `$${(Math.floor(row.unit_price / 20) * 20).toFixed(0)}`;
       buckets[bucket] = (buckets[bucket] || 0) + 1;
     }
     return Object.entries(buckets)
       .sort(([a], [b]) => parseFloat(a.slice(1)) - parseFloat(b.slice(1)))
       .map(([range, count]) => ({ range, count }));
-  }, [rows, isLoaded]);
+  }, [chartRows, isLoaded]);
 
+  // Group by year-month, sorted, with cleaner labels
   const priceTrends = useMemo(() => {
-    if (!isLoaded) return [];
+    if (!isLoaded || chartRows.length === 0) return [];
     const byDate = new Map<string, { total: number; count: number }>();
-    for (const row of rows) {
-      const date = row.month_year;
-      if (!byDate.has(date)) byDate.set(date, { total: 0, count: 0 });
-      const entry = byDate.get(date)!;
+    for (const row of chartRows) {
+      // Normalize date to YYYY-MM for sorting
+      const raw = row.month_year;
+      const key = raw; // already in sortable format from our CSV
+      if (!byDate.has(key)) byDate.set(key, { total: 0, count: 0 });
+      const entry = byDate.get(key)!;
       entry.total += row.unit_price;
       entry.count++;
     }
-    return [...byDate.entries()]
-      .sort(([a], [b]) => a.localeCompare(b))
-      .map(([date, { total, count }]) => ({
-        date,
-        avgPrice: Math.round((total / count) * 100) / 100,
-      }));
-  }, [rows, isLoaded]);
+    const sorted = [...byDate.entries()].sort(([a], [b]) => a.localeCompare(b));
+
+    // Downsample if too many points — show max ~30 for clean x-axis
+    const maxPoints = 30;
+    let entries = sorted;
+    if (entries.length > maxPoints) {
+      const step = entries.length / maxPoints;
+      const sampled = [];
+      for (let i = 0; i < maxPoints; i++) {
+        sampled.push(entries[Math.floor(i * step)]);
+      }
+      sampled.push(entries[entries.length - 1]);
+      entries = sampled;
+    }
+
+    // Show labels at intervals for a clean x-axis (~8-10 labels max)
+    const labelInterval = Math.max(1, Math.ceil(entries.length / 10));
+    return entries.map(([date, { total, count }], i) => ({
+      date: i % labelInterval === 0 || i === entries.length - 1 ? date : '',
+      avgPrice: Math.round((total / count) * 100) / 100,
+    }));
+  }, [chartRows, isLoaded]);
 
   const dateRange = useMemo(() => {
     if (!isLoaded || rows.length === 0) return 'N/A';
     const dates = rows.map(r => r.month_year).filter(Boolean).sort();
     return `${dates[0]} — ${dates[dates.length - 1]}`;
   }, [rows, isLoaded]);
+
+  const productFilterUI = (
+    value: string,
+    onChange: (v: string) => void,
+    label: string,
+  ) => (
+    <div style={{ width: '220px' }}>
+      <Typography variant="label-sm-bold" style={{ marginBottom: '6px' }}>{label}</Typography>
+      <Select value={value} onValueChange={onChange}>
+        <SelectTrigger width="fill">
+          <SelectValue placeholder="All Products" />
+        </SelectTrigger>
+        <SelectContent>
+          <SelectItem value="all">All Products</SelectItem>
+          {products.map(p => (
+            <SelectItem key={p.id} value={p.id}>
+              {p.id} ({p.category})
+            </SelectItem>
+          ))}
+        </SelectContent>
+      </Select>
+    </div>
+  );
 
   if (!isLoaded) {
     return (
@@ -182,13 +238,21 @@ export function DataExplorer() {
         <MetricCard label="Date Range" value={dateRange} />
       </div>
 
+      {/* Chart filter */}
+      <div className="flex items-end" style={{ gap: '16px', marginBottom: '16px' }}>
+        {productFilterUI(chartProduct, setChartProduct, 'Filter Charts by Product')}
+        {chartProduct !== 'all' && (
+          <Badge variant="primary">{chartRows.length} rows</Badge>
+        )}
+      </div>
+
       {/* Charts */}
       <div
         style={{
           display: 'grid',
           gridTemplateColumns: 'repeat(auto-fit, minmax(400px, 1fr))',
           gap: '24px',
-          marginBottom: '32px',
+          marginBottom: '48px',
         }}
       >
         {priceDistribution.length > 0 && (
@@ -196,7 +260,7 @@ export function DataExplorer() {
             data={priceDistribution}
             xAxisKey="range"
             yAxisKey="count"
-            title="Price Distribution"
+            title={`Price Distribution${chartProduct !== 'all' ? ` — ${chartProduct}` : ''}`}
             xAxisLabel="Price Range"
             yAxisLabel="Count"
             barColor={CHART_COLORS.PRIMARY}
@@ -207,19 +271,22 @@ export function DataExplorer() {
           <LineChart
             data={priceTrends}
             xAxisKey="date"
-            series={[{ dataKey: 'avgPrice', color: getSeriesColor(0), strokeWidth: 2 }]}
-            title="Average Price Over Time"
+            series={[{ dataKey: 'avgPrice', color: getSeriesColor(0), strokeWidth: 2, dot: false }]}
+            title={`Avg Price Over Time${chartProduct !== 'all' ? ` — ${chartProduct}` : ''}`}
             xAxisLabel="Date"
             yAxisLabel="Avg Price ($)"
           />
         )}
       </div>
 
-      {/* Data Table */}
-      <div>
-        <Typography variant="heading-sm" style={{ marginBottom: '16px' }}>Raw Data</Typography>
-        <Table table={table} showPagination />
+      {/* Table filter + Data Table */}
+      <div className="flex items-end justify-between" style={{ marginBottom: '16px' }}>
+        {productFilterUI(tableProduct, setTableProduct, 'Filter Table by Product')}
+        <Typography variant="body-sm" style={{ color: 'var(--color-secondary)' }}>
+          Showing {tableRows.length.toLocaleString()} rows
+        </Typography>
       </div>
+      <Table table={table} showPagination />
     </div>
   );
 }
