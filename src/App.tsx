@@ -177,7 +177,10 @@ function App() {
 
                 {/* Dataset switcher */}
                 {csvData.isLoaded && (
-                  <div className="flex items-center" style={{ gap: '4px', padding: '6px 0' }}>
+                  <div className="flex items-center" style={{ gap: '8px', padding: '6px 0' }}>
+                    <span style={{ fontSize: '12px', color: 'var(--color-secondary)', fontWeight: 500 }}>
+                      Dataset:
+                    </span>
                     <button
                       onClick={() => {
                         if (csvData.datasetName !== 'retail_price' && !csvData.isLoading) {
