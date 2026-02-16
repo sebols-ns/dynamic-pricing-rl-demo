@@ -48,7 +48,7 @@ export function useRlTraining() {
     isRunningRef.current = false;
 
     const env = new PricingEnvironment({ productRows, weights });
-    const agent = new QLearningAgent(config);
+    const agent = new QLearningAgent(config, env.getTotalStates());
     envRef.current = env;
     agentRef.current = agent;
     episodeRef.current = 0;

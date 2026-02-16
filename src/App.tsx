@@ -8,6 +8,7 @@ import { useRlTraining } from './hooks/useRlTraining';
 import { DataExplorer } from './pages/DataExplorer';
 import { RlTraining } from './pages/RlTraining';
 import { PricingLab } from './pages/PricingLab';
+import { Backtesting } from './pages/Backtesting';
 import { Explainability } from './pages/Explainability';
 import { Learn } from './pages/Learn';
 import type { QLearningAgent } from './engine/q-learning';
@@ -168,6 +169,7 @@ function App() {
                   <TabsTrigger value="data">Data Explorer</TabsTrigger>
                   <TabsTrigger value="training">RL Training</TabsTrigger>
                   <TabsTrigger value="pricing-lab">Pricing Lab</TabsTrigger>
+                  <TabsTrigger value="backtesting">Backtesting</TabsTrigger>
                   <TabsTrigger value="explainability">Explainability</TabsTrigger>
                   <TabsTrigger value="learn">Learn</TabsTrigger>
                 </TabsList>
@@ -182,6 +184,9 @@ function App() {
                 </TabsContent>
                 <TabsContent value="pricing-lab">
                   <PricingLab />
+                </TabsContent>
+                <TabsContent value="backtesting">
+                  <Backtesting />
                 </TabsContent>
                 <TabsContent value="explainability">
                   <Explainability />

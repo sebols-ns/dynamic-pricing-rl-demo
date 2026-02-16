@@ -10,9 +10,9 @@ export class QLearningAgent {
   private totalStates: number;
   private numActions: number;
 
-  constructor(config: Partial<TrainingConfig> = {}) {
+  constructor(config: Partial<TrainingConfig> = {}, totalStates?: number) {
     this.config = { ...DEFAULT_CONFIG, ...config };
-    this.totalStates = TOTAL_STATES;
+    this.totalStates = totalStates ?? TOTAL_STATES;
     this.numActions = NUM_ACTIONS;
     this.qTable = new Float64Array(this.totalStates * this.numActions);
     // Zero initialization — epsilon-greedy handles exploration

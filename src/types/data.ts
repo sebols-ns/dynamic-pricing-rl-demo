@@ -29,6 +29,8 @@ export interface RetailRow {
   fp2: number;
   fp3: number;
   lag_price: number;
+  inventory_level: number;
+  demand_forecast: number;
 }
 
 export interface ProductSummary {

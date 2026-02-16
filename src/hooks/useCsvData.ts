@@ -1,7 +1,11 @@
 import { createContext, useContext, useState, useCallback } from 'react';
 import type { RetailRow, ProductSummary } from '../types/data';
 import { parseCsv } from '../utils/csv-parser';
+import { adaptInventoryRows } from '../utils/inventory-adapter';
 import { mean } from '../utils/math';
+import Papa from 'papaparse';
+
+export type DatasetName = 'retail_price' | 'store_inventory';
 
 interface CsvDataState {
   rows: RetailRow[];
@@ -10,8 +14,10 @@ interface CsvDataState {
   isLoaded: boolean;
   isLoading: boolean;
   error: string | null;
+  datasetName: DatasetName;
   loadFromFile: (file: File) => Promise<void>;
   loadSampleData: () => Promise<void>;
+  loadInventoryData: () => Promise<void>;
 }
 
 const defaultState: CsvDataState = {
@@ -21,8 +27,10 @@ const defaultState: CsvDataState = {
   isLoaded: false,
   isLoading: false,
   error: null,
+  datasetName: 'retail_price',
   loadFromFile: async () => {},
   loadSampleData: async () => {},
+  loadInventoryData: async () => {},
 };
 
 export const CsvDataContext = createContext<CsvDataState>(defaultState);
@@ -38,6 +46,7 @@ export function useCsvDataProvider(): CsvDataState {
   const [isLoaded, setIsLoaded] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [datasetName, setDatasetName] = useState<DatasetName>('retail_price');
 
   const processRows = useCallback((parsed: RetailRow[]) => {
     setRows(parsed);
@@ -72,6 +81,7 @@ export function useCsvDataProvider(): CsvDataState {
     setError(null);
     try {
       const parsed = await parseCsv(file);
+      setDatasetName('retail_price');
       processRows(parsed);
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Failed to parse CSV');
@@ -87,6 +97,7 @@ export function useCsvDataProvider(): CsvDataState {
       const response = await fetch(`${import.meta.env.BASE_URL}retail_price.csv`);
       const text = await response.text();
       const parsed = await parseCsv(text);
+      setDatasetName('retail_price');
       processRows(parsed);
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Failed to load sample data');
@@ -95,5 +106,29 @@ export function useCsvDataProvider(): CsvDataState {
     }
   }, [processRows]);
 
-  return { rows, products, categories, isLoaded, isLoading, error, loadFromFile, loadSampleData };
+  const loadInventoryData = useCallback(async () => {
+    setIsLoading(true);
+    setError(null);
+    try {
+      const response = await fetch(`${import.meta.env.BASE_URL}retail_store_inventory.csv`);
+      const text = await response.text();
+      const rawRows = await new Promise<Record<string, string>[]>((resolve, reject) => {
+        Papa.parse<Record<string, string>>(text, {
+          header: true,
+          skipEmptyLines: true,
+          complete(results) { resolve(results.data); },
+          error(err: Error) { reject(err); },
+        });
+      });
+      const parsed = adaptInventoryRows(rawRows);
+      setDatasetName('store_inventory');
+      processRows(parsed);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Failed to load inventory data');
+    } finally {
+      setIsLoading(false);
+    }
+  }, [processRows]);
+
+  return { rows, products, categories, isLoaded, isLoading, error, datasetName, loadFromFile, loadSampleData, loadInventoryData };
 }

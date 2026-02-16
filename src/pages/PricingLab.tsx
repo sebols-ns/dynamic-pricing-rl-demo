@@ -11,7 +11,7 @@ import { useCsvData } from '../hooks/useCsvData';
 import { useTrainedAgent } from '../hooks/useTrainedAgent';
 import { MetricCard } from '../components/MetricCard';
 import type { State } from '../types/rl';
-import { ACTION_MULTIPLIERS, NUM_ACTIONS, DEMAND_BINS, COMPETITOR_BINS, SEASON_BINS, LAG_PRICE_BINS } from '../types/rl';
+import { ACTION_MULTIPLIERS, NUM_ACTIONS, DEMAND_BINS, COMPETITOR_BINS, SEASON_BINS, LAG_PRICE_BINS, INVENTORY_BINS, FORECAST_BINS } from '../types/rl';
 
 const cardStyle: React.CSSProperties = {
   border: '1px solid var(--color-subtle)',
@@ -26,6 +26,10 @@ export function PricingLab() {
   const [demand, setDemand] = useState(1.0);
   const [competitorPrice, setCompetitorPrice] = useState(1);
   const [season, setSeason] = useState(2);
+  const [inventoryBin, setInventoryBin] = useState(1);
+  const [forecastBin, setForecastBin] = useState(1);
+
+  const hasExtended = env?.hasExtendedState ?? false;
 
   const results = useMemo(() => {
     if (!agent || !env || !isTrained) return null;
@@ -35,6 +39,8 @@ export function PricingLab() {
       competitorPriceBin: competitorPrice,
       seasonBin: season,
       lagPriceBin: 1,
+      inventoryBin: hasExtended ? inventoryBin : 0,
+      forecastBin: hasExtended ? forecastBin : 0,
     };
 
     const stateIndex = env.stateToIndex(state);
@@ -61,7 +67,7 @@ export function PricingLab() {
       bestAction,
       basePrice: env.getBasePrice(),
     };
-  }, [agent, env, isTrained, demand, competitorPrice, season]);
+  }, [agent, env, isTrained, demand, competitorPrice, season, hasExtended, inventoryBin, forecastBin]);
 
   const comparisonData = useMemo(() => {
     if (!results) return { revenue: [], margin: [], revLift: 0, marginLift: 0 };
@@ -87,7 +93,7 @@ export function PricingLab() {
     };
   }, [results]);
 
-  // Aggregate comparison across ALL 108 states — shows RL's true adaptive advantage
+  // Aggregate comparison across all states — shows RL's true adaptive advantage
   const aggregateComparison = useMemo(() => {
     if (!agent || !env || !isTrained) return null;
 
@@ -97,29 +103,35 @@ export function PricingLab() {
     let rlTotalMar = 0, stTotalMar = 0, rdTotalMar = 0;
     let stateCount = 0;
 
+    const invMax = hasExtended ? INVENTORY_BINS : 1;
+    const frcMax = hasExtended ? FORECAST_BINS : 1;
+
     for (let d = 0; d < DEMAND_BINS; d++) {
       for (let c = 0; c < COMPETITOR_BINS; c++) {
         for (let s = 0; s < SEASON_BINS; s++) {
           for (let l = 0; l < LAG_PRICE_BINS; l++) {
-            const state: State = { demandBin: d, competitorPriceBin: c, seasonBin: s, lagPriceBin: l };
-            const stateIndex = env.stateToIndex(state);
-            const bestAction = agent.getBestAction(stateIndex);
+            for (let inv = 0; inv < invMax; inv++) {
+              for (let frc = 0; frc < frcMax; frc++) {
+                const state: State = { demandBin: d, competitorPriceBin: c, seasonBin: s, lagPriceBin: l, inventoryBin: inv, forecastBin: frc };
+                const stateIndex = env.stateToIndex(state);
+                const bestAction = agent.getBestAction(stateIndex);
 
-            const rlRes = env.simulateAction(state, bestAction);
-            const stRes = env.simulateAction(state, staticAction);
+                const rlRes = env.simulateAction(state, bestAction);
+                const stRes = env.simulateAction(state, staticAction);
 
-            rlTotalRev += rlRes.revenue;
-            stTotalRev += stRes.revenue;
-            rlTotalMar += rlRes.margin;
-            stTotalMar += stRes.margin;
+                rlTotalRev += rlRes.revenue;
+                stTotalRev += stRes.revenue;
+                rlTotalMar += rlRes.margin;
+                stTotalMar += stRes.margin;
 
-            // Random: average all actions
-            for (let a = 0; a < NUM_ACTIONS; a++) {
-              const r = env.simulateAction(state, a);
-              rdTotalRev += r.revenue / NUM_ACTIONS;
-              rdTotalMar += r.margin / NUM_ACTIONS;
+                for (let a = 0; a < NUM_ACTIONS; a++) {
+                  const r = env.simulateAction(state, a);
+                  rdTotalRev += r.revenue / NUM_ACTIONS;
+                  rdTotalMar += r.margin / NUM_ACTIONS;
+                }
+                stateCount++;
+              }
             }
-            stateCount++;
           }
         }
       }
@@ -146,7 +158,7 @@ export function PricingLab() {
       revLift: avgStRev > 0 ? ((avgRlRev - avgStRev) / avgStRev) * 100 : 0,
       marginLift: avgStMar > 0 ? ((avgRlMar - avgStMar) / avgStMar) * 100 : 0,
     };
-  }, [agent, env, isTrained]);
+  }, [agent, env, isTrained, hasExtended]);
 
   if (!isLoaded) {
     return (
@@ -183,6 +195,9 @@ export function PricingLab() {
 
   const seasonLabels = ['Winter', 'Spring', 'Summer', 'Fall'];
   const compLabels = ['Lower', 'Similar', 'Higher'];
+  const inventoryLabels = ['Low', 'Medium', 'High'];
+  const forecastLabels = ['Low', 'Medium', 'High'];
+  const totalStates = env?.getTotalStates() ?? 108;
 
   return (
     <div style={{ padding: '32px 0' }}>
@@ -238,6 +253,28 @@ export function PricingLab() {
             <input type="range" min={0} max={3} step={1} value={season}
               onChange={e => setSeason(Number(e.target.value))} style={{ width: '100%' }} />
           </div>
+
+          {hasExtended && (
+            <>
+              <div style={{ marginTop: '16px' }}>
+                <div className="flex justify-between" style={{ marginBottom: '6px' }}>
+                  <Typography variant="label-sm-bold">Inventory Level</Typography>
+                  <Typography variant="label-sm" style={{ color: 'var(--color-interactive)' }}>{inventoryLabels[inventoryBin]}</Typography>
+                </div>
+                <input type="range" min={0} max={2} step={1} value={inventoryBin}
+                  onChange={e => setInventoryBin(Number(e.target.value))} style={{ width: '100%' }} />
+              </div>
+
+              <div style={{ marginTop: '16px' }}>
+                <div className="flex justify-between" style={{ marginBottom: '6px' }}>
+                  <Typography variant="label-sm-bold">Demand Forecast</Typography>
+                  <Typography variant="label-sm" style={{ color: 'var(--color-interactive)' }}>{forecastLabels[forecastBin]}</Typography>
+                </div>
+                <input type="range" min={0} max={2} step={1} value={forecastBin}
+                  onChange={e => setForecastBin(Number(e.target.value))} style={{ width: '100%' }} />
+              </div>
+            </>
+          )}
         </div>
 
       </div>
@@ -323,7 +360,7 @@ export function PricingLab() {
             <>
               <Typography variant="heading-sm" style={{ marginBottom: '8px' }}>Across All Market Conditions</Typography>
               <Typography variant="body-xs" style={{ color: 'var(--color-secondary)', marginBottom: '16px' }}>
-                Average performance across all 108 possible state combinations. This is where the RL agent's
+                Average performance across all {totalStates} possible state combinations. This is where the RL agent's
                 adaptive pricing shines — it chooses a different optimal price for each market condition, while
                 static pricing uses 1.00x everywhere.
               </Typography>

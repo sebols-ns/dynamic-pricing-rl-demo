@@ -8,6 +8,7 @@ const NUMERIC_FIELDS: (keyof RetailRow)[] = [
   'weekday', 'weekend', 'holiday', 'month', 'year', 's', 'volume',
   'comp_1', 'comp_2', 'comp_3', 'ps1', 'ps2', 'ps3',
   'fp1', 'fp2', 'fp3', 'lag_price',
+  'inventory_level', 'demand_forecast',
 ];
 
 export function parseCsv(input: string | File): Promise<RetailRow[]> {

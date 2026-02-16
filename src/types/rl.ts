@@ -3,6 +3,8 @@ export interface State {
   competitorPriceBin: number;
   seasonBin: number;
   lagPriceBin: number;
+  inventoryBin: number;
+  forecastBin: number;
 }
 
 export const ACTION_MULTIPLIERS = [0.80, 0.90, 0.95, 1.00, 1.05, 1.10, 1.15, 1.20, 1.30, 1.40, 1.50, 1.60] as const;
@@ -12,7 +14,9 @@ export const DEMAND_BINS = 3;
 export const COMPETITOR_BINS = 3;
 export const SEASON_BINS = 4;
 export const LAG_PRICE_BINS = 3;
-export const TOTAL_STATES = DEMAND_BINS * COMPETITOR_BINS * SEASON_BINS * LAG_PRICE_BINS; // 108
+export const INVENTORY_BINS = 3;
+export const FORECAST_BINS = 3;
+export const TOTAL_STATES = DEMAND_BINS * COMPETITOR_BINS * SEASON_BINS * LAG_PRICE_BINS * INVENTORY_BINS * FORECAST_BINS; // 972
 
 export interface TrainingConfig {
   learningRate: number;

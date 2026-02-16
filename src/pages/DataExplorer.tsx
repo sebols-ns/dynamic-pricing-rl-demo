@@ -17,6 +17,7 @@ import {
   type SortingState,
 } from '@tanstack/react-table';
 import { useCsvData } from '../hooks/useCsvData';
+import type { DatasetName } from '../hooks/useCsvData';
 import { MetricCard } from '../components/MetricCard';
 import type { RetailRow } from '../types/data';
 
@@ -46,7 +47,7 @@ const columns = [
 ];
 
 export function DataExplorer() {
-  const { rows, products, categories, isLoaded, isLoading, error, loadFromFile, loadSampleData } = useCsvData();
+  const { rows, products, categories, isLoaded, isLoading, error, datasetName, loadFromFile, loadSampleData, loadInventoryData } = useCsvData();
   const [sorting, setSorting] = useState<SortingState>([]);
   const [chartProduct, setChartProduct] = useState<string>('all');
   const [tableProduct, setTableProduct] = useState<string>('all');
@@ -161,11 +162,21 @@ export function DataExplorer() {
   );
 
   if (!isLoaded) {
+    const datasetCardStyle: React.CSSProperties = {
+      border: '1px solid var(--color-subtle)',
+      borderRadius: '8px',
+      padding: '24px',
+      backgroundColor: 'var(--color-base-white)',
+      display: 'flex',
+      flexDirection: 'column',
+      gap: '12px',
+    };
+
     return (
       <div style={{ padding: '32px 0' }}>
         <Typography variant="heading-lg" style={{ marginBottom: '8px' }}>Data Explorer</Typography>
         <Typography variant="body-md" style={{ color: 'var(--color-secondary)', marginBottom: '32px' }}>
-          Upload a CSV file or load the sample Kaggle Retail Price Optimization dataset to begin.
+          Choose a sample dataset to get started, or upload your own CSV.
         </Typography>
 
         {error && (
@@ -180,60 +191,74 @@ export function DataExplorer() {
           </div>
         )}
 
-        {/* Dataset context */}
+        {/* Dataset cards */}
         <div style={{
-          border: '1px solid var(--color-subtle)',
-          borderRadius: '8px',
-          padding: '20px',
-          backgroundColor: 'var(--color-info-subtle)',
-          borderColor: 'var(--color-blue-200)',
+          display: 'grid',
+          gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))',
+          gap: '16px',
           marginBottom: '24px',
         }}>
-          <Typography variant="heading-sm" style={{ marginBottom: '8px' }}>About the Dataset</Typography>
-          <Typography variant="body-sm" style={{ color: 'var(--color-secondary)', marginBottom: '8px' }}>
-            The sample data comes from the <strong>Kaggle Retail Price Optimization</strong> dataset (CC0 Public Domain).
-            It contains 607 rows of monthly product-level retail data from a Brazilian e-commerce platform, covering
-            demand volumes, unit prices, freight costs, competitor pricing, and seasonal patterns.
-          </Typography>
-          <Typography variant="body-sm" style={{ color: 'var(--color-secondary)' }}>
-            Key columns used by the RL agent: <strong>qty</strong> (demand), <strong>unit_price</strong> (current price),
-            <strong> comp_1</strong> (primary competitor price), <strong>freight_price</strong> (cost proxy),
-            <strong> lag_price</strong> (previous period price), and <strong>month</strong> (seasonality).
-          </Typography>
+          {/* Retail Price — lightweight */}
+          <div style={datasetCardStyle}>
+            <div className="flex items-center justify-between">
+              <Typography variant="heading-sm">Retail Price</Typography>
+              <Badge variant="success">607 rows</Badge>
+            </div>
+            <Typography variant="body-sm" style={{ color: 'var(--color-secondary)', flex: 1 }}>
+              Monthly product-level data from a Brazilian e-commerce platform.
+              Covers demand, unit prices, freight costs, competitor pricing, and seasonal patterns.
+              Loads instantly — great for a quick walkthrough.
+            </Typography>
+            <Button onClick={loadSampleData} disabled={isLoading} style={{ alignSelf: 'flex-start' }}>
+              {isLoading && datasetName === 'retail_price' ? 'Loading...' : 'Load Retail Price'}
+            </Button>
+          </div>
+
+          {/* Store Inventory — heavier */}
+          <div style={datasetCardStyle}>
+            <div className="flex items-center justify-between">
+              <Typography variant="heading-sm">Store Inventory</Typography>
+              <Badge variant="neutral">73K rows</Badge>
+            </div>
+            <Typography variant="body-sm" style={{ color: 'var(--color-secondary)', flex: 1 }}>
+              Daily store-product data across multiple regions with demand forecasts,
+              inventory levels, competitor pricing, weather, and seasonality.
+              Columns are automatically mapped to the RL format.
+            </Typography>
+            <Button onClick={loadInventoryData} disabled={isLoading} variant="outline" style={{ alignSelf: 'flex-start' }}>
+              {isLoading && datasetName === 'store_inventory' ? 'Loading...' : 'Load Store Inventory'}
+            </Button>
+          </div>
         </div>
 
+        {/* Custom upload */}
         <div
           style={{
             border: '2px dashed var(--color-subtle)',
             borderRadius: '8px',
-            padding: '48px 32px',
+            padding: '32px',
             textAlign: 'center',
             backgroundColor: 'var(--color-gray)',
           }}
           onDragOver={e => e.preventDefault()}
           onDrop={handleDrop}
         >
-          <Typography variant="heading-sm" style={{ marginBottom: '8px' }}>
-            Drag & Drop CSV Here
+          <Typography variant="body-md" style={{ marginBottom: '4px', fontWeight: 500 }}>
+            Upload Your Own CSV
           </Typography>
-          <Typography variant="body-sm" style={{ color: 'var(--color-secondary)', marginBottom: '24px' }}>
-            or use the buttons below
+          <Typography variant="body-sm" style={{ color: 'var(--color-secondary)', marginBottom: '16px' }}>
+            Drag & drop a file here, or click below. You'll map columns to the RL fields after upload.
           </Typography>
-          <div className="flex justify-center" style={{ gap: '12px' }}>
-            <Button onClick={loadSampleData} disabled={isLoading}>
-              {isLoading ? 'Loading...' : 'Load Sample Data'}
-            </Button>
-            <Button variant="outline" onClick={() => document.getElementById('csv-upload')?.click()}>
-              Upload CSV
-            </Button>
-            <input
-              id="csv-upload"
-              type="file"
-              accept=".csv"
-              className="hidden"
-              onChange={e => handleFileInput(e.target.files)}
-            />
-          </div>
+          <Button variant="outline" onClick={() => document.getElementById('csv-upload')?.click()} disabled={isLoading}>
+            Choose File
+          </Button>
+          <input
+            id="csv-upload"
+            type="file"
+            accept=".csv"
+            className="hidden"
+            onChange={e => handleFileInput(e.target.files)}
+          />
         </div>
       </div>
     );
@@ -243,7 +268,44 @@ export function DataExplorer() {
     <div style={{ padding: '32px 0' }}>
       <div className="flex items-center justify-between" style={{ marginBottom: '24px' }}>
         <Typography variant="heading-lg">Data Explorer</Typography>
-        <Badge variant="success">{rows.length.toLocaleString()} rows loaded</Badge>
+        <div className="flex items-center" style={{ gap: '12px' }}>
+          <div
+            style={{
+              display: 'inline-flex',
+              borderRadius: '6px',
+              border: '1px solid var(--color-subtle)',
+              overflow: 'hidden',
+            }}
+          >
+            {([
+              { key: 'retail_price' as DatasetName, label: 'Retail Price' },
+              { key: 'store_inventory' as DatasetName, label: 'Store Inventory' },
+            ]).map(({ key, label }) => (
+              <button
+                key={key}
+                onClick={() => {
+                  if (key === datasetName || isLoading) return;
+                  if (key === 'retail_price') loadSampleData();
+                  else loadInventoryData();
+                }}
+                disabled={isLoading}
+                style={{
+                  padding: '6px 14px',
+                  fontSize: '13px',
+                  fontWeight: 500,
+                  cursor: key === datasetName ? 'default' : 'pointer',
+                  border: 'none',
+                  backgroundColor: key === datasetName ? 'var(--color-interactive)' : 'var(--color-base-white)',
+                  color: key === datasetName ? 'white' : 'var(--color-dark)',
+                  transition: 'background-color 0.15s',
+                }}
+              >
+                {label}
+              </button>
+            ))}
+          </div>
+          <Badge variant="success">{rows.length.toLocaleString()} rows loaded</Badge>
+        </div>
       </div>
 
       {/* KPI Cards */}
@@ -269,13 +331,23 @@ export function DataExplorer() {
         backgroundColor: 'var(--color-info-subtle)',
         marginBottom: '24px',
       }}>
-        <Typography variant="body-sm" style={{ color: 'var(--color-secondary)' }}>
-          <strong>Kaggle Retail Price Optimization</strong> — Monthly product-level data from a Brazilian
-          e-commerce platform. Each row captures demand (<code>qty</code>), pricing (<code>unit_price</code>),
-          shipping cost (<code>freight_price</code>), competitor prices (<code>comp_1/2/3</code>),
-          historical price (<code>lag_price</code>), and time features (<code>month</code>, <code>weekday/weekend/holiday</code>).
-          The RL agent uses these to learn state-dependent pricing strategies.
-        </Typography>
+        {datasetName === 'store_inventory' ? (
+          <Typography variant="body-sm" style={{ color: 'var(--color-secondary)' }}>
+            <strong>Retail Store Inventory Dataset</strong> — 73K rows of daily store-product-level data
+            across multiple regions. Includes demand forecasts, inventory levels, competitor pricing,
+            weather conditions, and seasonality. Columns are mapped to the RL agent's format
+            (e.g. <code>Units Sold</code> → <code>qty</code>, <code>Price</code> → <code>unit_price</code>,
+            <code>Competitor Pricing</code> → <code>comp_1</code>).
+          </Typography>
+        ) : (
+          <Typography variant="body-sm" style={{ color: 'var(--color-secondary)' }}>
+            <strong>Kaggle Retail Price Optimization</strong> — Monthly product-level data from a Brazilian
+            e-commerce platform. Each row captures demand (<code>qty</code>), pricing (<code>unit_price</code>),
+            shipping cost (<code>freight_price</code>), competitor prices (<code>comp_1/2/3</code>),
+            historical price (<code>lag_price</code>), and time features (<code>month</code>, <code>weekday/weekend/holiday</code>).
+            The RL agent uses these to learn state-dependent pricing strategies.
+          </Typography>
+        )}
       </div>
 
       {/* Chart filter */}

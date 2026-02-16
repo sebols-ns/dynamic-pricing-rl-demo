@@ -1,36 +1,43 @@
 import type { State, ShapleyValue } from '../types/rl';
-import { ACTION_MULTIPLIERS, DEMAND_BINS, COMPETITOR_BINS, SEASON_BINS, LAG_PRICE_BINS } from '../types/rl';
+import { ACTION_MULTIPLIERS, DEMAND_BINS, COMPETITOR_BINS, SEASON_BINS, LAG_PRICE_BINS, INVENTORY_BINS, FORECAST_BINS } from '../types/rl';
 import { factorial } from '../utils/math';
 import type { QLearningAgent } from './q-learning';
 import type { PricingEnvironment } from './environment';
 
-const FEATURES = ['demandBin', 'competitorPriceBin', 'seasonBin', 'lagPriceBin'] as const;
-const NUM_FEATURES = FEATURES.length;
+type StateKey = keyof State;
+
+const BASE_FEATURES: StateKey[] = ['demandBin', 'competitorPriceBin', 'seasonBin', 'lagPriceBin'];
+const EXTENDED_FEATURES: StateKey[] = ['inventoryBin', 'forecastBin'];
 
 const FEATURE_LABELS: Record<string, string[]> = {
   demandBin: ['Low Demand', 'Medium Demand', 'High Demand'],
   competitorPriceBin: ['Lower Comp.', 'Similar Comp.', 'Higher Comp.'],
   seasonBin: ['Winter', 'Spring', 'Summer', 'Fall'],
   lagPriceBin: ['Low Hist.', 'Medium Hist.', 'High Hist.'],
+  inventoryBin: ['Low Inventory', 'Medium Inventory', 'High Inventory'],
+  forecastBin: ['Low Forecast', 'Medium Forecast', 'High Forecast'],
 };
 
-function getBaselineState(): State {
+function getBaselineState(hasExtended: boolean): State {
   return {
     demandBin: Math.floor(DEMAND_BINS / 2),
     competitorPriceBin: Math.floor(COMPETITOR_BINS / 2),
     seasonBin: Math.floor(SEASON_BINS / 2),
     lagPriceBin: Math.floor(LAG_PRICE_BINS / 2),
+    inventoryBin: hasExtended ? Math.floor(INVENTORY_BINS / 2) : 0,
+    forecastBin: hasExtended ? Math.floor(FORECAST_BINS / 2) : 0,
   };
 }
 
 function buildCoalitionState(
   coalition: Set<number>,
+  features: StateKey[],
   actualState: State,
   baselineState: State,
 ): State {
   const state = { ...baselineState };
   for (const idx of coalition) {
-    const feature = FEATURES[idx];
+    const feature = features[idx];
     state[feature] = actualState[feature];
   }
   return state;
@@ -46,11 +53,9 @@ function getExpectedPrice(agent: QLearningAgent, env: PricingEnvironment, state:
   const qValues = agent.getQValues(stateIndex);
   const basePrice = env.getBasePrice();
 
-  // Check if Q-values are all zero (untrained) — return base price
   const maxQ = Math.max(...qValues);
   if (maxQ <= 0.001) return basePrice;
 
-  // Softmax with temperature — lower temp = sharper distribution
   const temperature = Math.max(0.05, maxQ * 0.1);
   const expValues = qValues.map(q => Math.exp((q - maxQ) / temperature));
   const sumExp = expValues.reduce((s, v) => s + v, 0);
@@ -67,24 +72,27 @@ export function computeShapleyValues(
   agent: QLearningAgent,
   env: PricingEnvironment,
 ): { shapValues: ShapleyValue[]; basePrice: number; finalPrice: number } {
-  const baselineState = getBaselineState();
+  const hasExtended = env.hasExtendedState;
+  const features: StateKey[] = hasExtended
+    ? [...BASE_FEATURES, ...EXTENDED_FEATURES]
+    : BASE_FEATURES;
+  const n = features.length;
+
+  const baselineState = getBaselineState(hasExtended);
   const basePrice = getExpectedPrice(agent, env, baselineState);
-  // finalPrice must also use getExpectedPrice so that basePrice + sum(shapley) = finalPrice
   const finalPrice = getExpectedPrice(agent, env, actualState);
 
   const shapValues: ShapleyValue[] = [];
-  const n = NUM_FEATURES;
 
   for (let i = 0; i < n; i++) {
     let shapValue = 0;
 
-    // Enumerate all subsets S of features NOT including i
-    const otherFeatures = [];
+    const otherFeatures: number[] = [];
     for (let j = 0; j < n; j++) {
       if (j !== i) otherFeatures.push(j);
     }
 
-    const numSubsets = 1 << otherFeatures.length; // 2^(n-1) = 8 subsets
+    const numSubsets = 1 << otherFeatures.length;
     for (let mask = 0; mask < numSubsets; mask++) {
       const S = new Set<number>();
       for (let bit = 0; bit < otherFeatures.length; bit++) {
@@ -96,17 +104,16 @@ export function computeShapleyValues(
       const sSize = S.size;
       const weight = (factorial(sSize) * factorial(n - sSize - 1)) / factorial(n);
 
-      // V(S ∪ {i}) - V(S)
       const withI = new Set(S);
       withI.add(i);
 
-      const priceWithout = getExpectedPrice(agent, env, buildCoalitionState(S, actualState, baselineState));
-      const priceWith = getExpectedPrice(agent, env, buildCoalitionState(withI, actualState, baselineState));
+      const priceWithout = getExpectedPrice(agent, env, buildCoalitionState(S, features, actualState, baselineState));
+      const priceWith = getExpectedPrice(agent, env, buildCoalitionState(withI, features, actualState, baselineState));
 
       shapValue += weight * (priceWith - priceWithout);
     }
 
-    const featureName = FEATURES[i];
+    const featureName = features[i];
     const binValue = actualState[featureName];
     const labels = FEATURE_LABELS[featureName];
     const label = labels[binValue] || `Bin ${binValue}`;
