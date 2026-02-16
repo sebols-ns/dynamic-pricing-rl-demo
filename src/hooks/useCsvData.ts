@@ -84,7 +84,7 @@ export function useCsvDataProvider(): CsvDataState {
     setIsLoading(true);
     setError(null);
     try {
-      const response = await fetch('/retail_price.csv');
+      const response = await fetch(`${import.meta.env.BASE_URL}retail_price.csv`);
       const text = await response.text();
       const parsed = await parseCsv(text);
       processRows(parsed);
