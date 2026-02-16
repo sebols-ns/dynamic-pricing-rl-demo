@@ -33,7 +33,7 @@ export class PricingEnvironment {
   private currentIdx: number = 0;
   private lastAction: number = -1;
   /** Penalty weight for price changes between steps (0 = no penalty) */
-  private priceChangePenalty: number = 0.08;
+  private priceChangePenalty: number = 0.15;
 
   /** True when the data has meaningful inventory_level / demand_forecast columns */
   readonly hasExtendedState: boolean;
