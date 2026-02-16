@@ -287,7 +287,7 @@ export function RlTraining({ training }: RlTrainingProps) {
                 </span>
               </div>
             </div>
-            <div style={{ padding: '8px 8px 0' }}>
+            <div style={{ padding: '8px 8px 16px' }}>
               <ResponsiveContainer width="100%" height={280}>
                 <RechartsLineChart data={chartData} margin={{ top: 8, right: 16, left: 8, bottom: 24 }}>
                   <CartesianGrid strokeDasharray="3 3" stroke="var(--color-neutral-200)" />
@@ -306,7 +306,7 @@ export function RlTraining({ training }: RlTrainingProps) {
             <div className="flex items-center justify-between px-3 py-2 border-b border-subtle">
               <Typography variant="label-sm-bold">Epsilon Decay</Typography>
             </div>
-            <div style={{ padding: '8px 8px 0' }}>
+            <div style={{ padding: '8px 8px 16px' }}>
               <ResponsiveContainer width="100%" height={280}>
                 <RechartsLineChart data={chartData} margin={{ top: 8, right: 16, left: 8, bottom: 24 }}>
                   <CartesianGrid strokeDasharray="3 3" stroke="var(--color-neutral-200)" />
@@ -321,10 +321,32 @@ export function RlTraining({ training }: RlTrainingProps) {
         )}
       </div>
 
-      {/* Q-Table Heatmap */}
+      {/* Q-Table Heatmap + Explainer */}
       {training.agent && (
-        <div style={cardStyle}>
-          <QTableHeatmap agent={training.agent} episode={training.episode} />
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 320px', gap: '24px', alignItems: 'start' }}>
+          <div style={cardStyle}>
+            <QTableHeatmap agent={training.agent} episode={training.episode} />
+          </div>
+          <div style={{ ...cardStyle, backgroundColor: 'var(--color-info-subtle)', borderColor: 'var(--color-blue-200)' }}>
+            <Typography variant="heading-sm" style={{ marginBottom: '12px' }}>Reading the Q-Table</Typography>
+            <Typography variant="body-xs" style={{ color: 'var(--color-secondary)', marginBottom: '12px' }}>
+              Each row is a <strong>state</strong> (a market condition the agent has encountered).
+              Each column is an <strong>action</strong> (a price multiplier from 0.70x to 1.20x).
+            </Typography>
+            <Typography variant="body-xs" style={{ color: 'var(--color-secondary)', marginBottom: '12px' }}>
+              Cell values are <strong>Q-values</strong> — the agent's learned estimate of how much reward
+              it expects from taking that action in that state. Higher values (darker green) mean the agent
+              believes that price multiplier is more profitable.
+            </Typography>
+            <Typography variant="body-xs" style={{ color: 'var(--color-secondary)', marginBottom: '12px' }}>
+              The <strong>outlined cell</strong> in each row is the agent's preferred action for that state —
+              the price it would recommend.
+            </Typography>
+            <Typography variant="body-xs" style={{ color: 'var(--color-secondary)' }}>
+              As training progresses, Q-values should differentiate: good actions rise while poor ones stay low.
+              If all values in a row look similar, the agent hasn't learned a clear preference for that state yet.
+            </Typography>
+          </div>
         </div>
       )}
     </div>
