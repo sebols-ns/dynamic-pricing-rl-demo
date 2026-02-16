@@ -400,7 +400,7 @@ export function Explainability() {
                       fontSize={10}
                       fill="var(--color-secondary)"
                       dominantBaseline="middle"
-                      fontVariantNumeric="tabular-nums"
+                      style={{ fontVariantNumeric: 'tabular-nums' }}
                     >
                       ${step.runningTotal.toFixed(2)}
                     </text>
