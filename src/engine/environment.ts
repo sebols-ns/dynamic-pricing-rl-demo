@@ -31,6 +31,9 @@ export class PricingEnvironment {
   private elasticity: number;
   private weights: RewardWeights;
   private currentIdx: number = 0;
+  private lastAction: number = -1;
+  /** Penalty weight for price changes between steps (0 = no penalty) */
+  private priceChangePenalty: number = 0.08;
 
   /** True when the data has meaningful inventory_level / demand_forecast columns */
   readonly hasExtendedState: boolean;
@@ -165,6 +168,7 @@ export class PricingEnvironment {
 
   reset(): State {
     this.currentIdx = Math.floor(Math.random() * this.rows.length);
+    this.lastAction = -1;
     return this.getState(this.rows[this.currentIdx]);
   }
 
@@ -184,13 +188,21 @@ export class PricingEnvironment {
     const margin = (price - this.baseCost) * predictedQty;
     const volumeSold = predictedQty;
 
-    const reward = computeReward(
+    let reward = computeReward(
       { revenue, margin, volume: volumeSold },
       this.weights,
       this.revenueRange,
       this.marginRange,
       this.volumeRange,
     );
+
+    // Penalize price changes to encourage stability
+    if (this.lastAction >= 0 && action !== this.lastAction) {
+      const prevMultiplier = ACTION_MULTIPLIERS[this.lastAction];
+      const changeMagnitude = Math.abs(multiplier - prevMultiplier) / prevMultiplier;
+      reward -= this.priceChangePenalty * changeMagnitude;
+    }
+    this.lastAction = action;
 
     this.currentIdx = (this.currentIdx + 1) % this.rows.length;
     const nextState = this.getState(this.rows[this.currentIdx]);
@@ -243,13 +255,20 @@ export class PricingEnvironment {
     const margin = (price - this.baseCost) * predictedQty;
     const volumeSold = predictedQty;
 
-    const reward = computeReward(
+    let reward = computeReward(
       { revenue, margin, volume: volumeSold },
       this.weights,
       this.revenueRange,
       this.marginRange,
       this.volumeRange,
     );
+
+    // Penalize price changes to encourage stability
+    if (this.lastAction >= 0 && action !== this.lastAction) {
+      const prevMultiplier = ACTION_MULTIPLIERS[this.lastAction];
+      const changeMagnitude = Math.abs(multiplier - prevMultiplier) / prevMultiplier;
+      reward -= this.priceChangePenalty * changeMagnitude;
+    }
 
     return { nextState: this.randomState(), reward, price, revenue, margin, volumeSold };
   }
