@@ -12,10 +12,11 @@ import type { State } from '../types/rl';
 export function Explainability() {
   const { isLoaded } = useCsvData();
   const { agent, env, isTrained, productId, episode } = useTrainedAgent();
-  const [demandBin, setDemandBin] = useState(1);
-  const [compBin, setCompBin] = useState(1);
-  const [seasonBin, setSeasonBin] = useState(2);
-  const [lagBin, setLagBin] = useState(1);
+  // Defaults differ from baseline (mid bins + summer) so Shapley values are non-zero on load
+  const [demandBin, setDemandBin] = useState(0);  // Low demand
+  const [compBin, setCompBin] = useState(2);       // Higher competitor
+  const [seasonBin, setSeasonBin] = useState(0);   // Winter
+  const [lagBin, setLagBin] = useState(2);          // High hist. price
 
   const state: State = useMemo(() => ({
     demandBin,

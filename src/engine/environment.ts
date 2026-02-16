@@ -51,13 +51,13 @@ export class PricingEnvironment {
     this.baseCost = mean(this.rows.map(r => r.freight_price));
     this.baseQty = mean(qtys);
 
-    // Estimate price elasticity from data variance
-    const prices = this.rows.map(r => r.unit_price);
-    const priceStd = Math.sqrt(prices.reduce((s, p) => s + (p - this.basePrice) ** 2, 0) / prices.length);
-    const qtyMean = this.baseQty;
-    // Inelastic demand (0.2–0.5): pricing up increases revenue because volume barely drops.
-    // This gives the agent a clear gradient — higher prices yield more revenue and margin.
-    this.elasticity = priceStd > 0 ? Math.min(0.5, Math.max(0.2, qtyMean / (priceStd * 40))) : 0.35;
+    // Fixed base elasticity. Data-driven estimation is unreliable (qty and price are
+    // in incompatible units/scales). 0.7 as a base, combined with symmetric state-dependent
+    // multipliers, gives a good spread of optimal prices across the 0.80x–1.60x action range:
+    //   Easy states (high demand, expensive competitors): e ≈ 0.24 → prefers 1.60x
+    //   Medium states: e ≈ 1.0 → prefers 1.20–1.30x
+    //   Tough states (low demand, cheap competitors): e ≈ 2.6 → prefers 0.80–1.00x
+    this.elasticity = 0.7;
 
     // Precompute normalization ranges — tighter ranges give better reward gradient
     const minMult = ACTION_MULTIPLIERS[0];
@@ -110,23 +110,28 @@ export class PricingEnvironment {
 
   /**
    * State-dependent elasticity: market conditions modulate price sensitivity.
-   * - Low demand → customers more price-sensitive (higher elasticity)
-   * - High competitor prices → customers less price-sensitive (lower elasticity)
+   * - Low demand → customers much more price-sensitive (higher elasticity → prefer lower prices)
+   * - High competitor prices → customers less price-sensitive (lower elasticity → can charge more)
    * - Summer/winter seasonality effects
-   * This ensures different states have different optimal prices.
+   *
+   * Factors are designed so that the "medium" state (bin 1 for all) has factors near 1.0,
+   * producing e ≈ base elasticity. This means:
+   *   - Medium states → e ≈ 0.85 → prefer ~1.30x (moderate premium)
+   *   - Easy states (high demand, expensive competitors) → e ≈ 0.2 → prefer 1.60x (max price)
+   *   - Tough states (low demand, cheap competitors) → e ≈ 2.0+ → prefer 0.80–1.00x
+   * This spreads optimal actions across the full 0.80x–1.60x range.
    */
   private getEffectiveElasticity(state: State): number {
-    // Base elasticity from data
     let e = this.elasticity;
-    // Low demand (bin 0) → 1.6x elasticity; high demand (bin 2) → 0.6x
-    const demandFactor = 1.6 - (state.demandBin / (DEMAND_BINS - 1)) * 1.0;
-    // Lower competitor prices (bin 0) → customers more sensitive (1.4x); higher (bin 2) → less (0.7x)
-    const compFactor = 1.4 - (state.competitorPriceBin / (COMPETITOR_BINS - 1)) * 0.7;
-    // Summer (bin 2) slightly less elastic, winter (bin 0) slightly more
-    const seasonFactor = state.seasonBin === 2 ? 0.85 : state.seasonBin === 0 ? 1.15 : 1.0;
+    // Low demand (bin 0) → 1.8x elasticity; high demand (bin 2) → 0.6x
+    // Medium (bin 1) → 1.2x — slightly above 1.0 so medium prefers moderate pricing
+    const demandFactor = 1.8 - (state.demandBin / (DEMAND_BINS - 1)) * 1.2;
+    // Lower competitor prices (bin 0) → price-sensitive (1.6x); higher (bin 2) → captive (0.8x)
+    const compFactor = 1.6 - (state.competitorPriceBin / (COMPETITOR_BINS - 1)) * 0.8;
+    // Winter (bin 0) more elastic (1.3x), summer (bin 2) less elastic (0.7x)
+    const seasonFactor = state.seasonBin === 2 ? 0.7 : state.seasonBin === 0 ? 1.3 : 1.0;
     e *= demandFactor * compFactor * seasonFactor;
-    // Clamp to reasonable range
-    return Math.min(2.0, Math.max(0.1, e));
+    return Math.min(4.0, Math.max(0.05, e));
   }
 
   reset(): State {

@@ -179,6 +179,28 @@ export function DataExplorer() {
           </div>
         )}
 
+        {/* Dataset context */}
+        <div style={{
+          border: '1px solid var(--color-subtle)',
+          borderRadius: '8px',
+          padding: '20px',
+          backgroundColor: 'var(--color-info-subtle)',
+          borderColor: 'var(--color-blue-200)',
+          marginBottom: '24px',
+        }}>
+          <Typography variant="heading-sm" style={{ marginBottom: '8px' }}>About the Dataset</Typography>
+          <Typography variant="body-sm" style={{ color: 'var(--color-secondary)', marginBottom: '8px' }}>
+            The sample data comes from the <strong>Kaggle Retail Price Optimization</strong> dataset (CC0 Public Domain).
+            It contains 607 rows of monthly product-level retail data from a Brazilian e-commerce platform, covering
+            demand volumes, unit prices, freight costs, competitor pricing, and seasonal patterns.
+          </Typography>
+          <Typography variant="body-sm" style={{ color: 'var(--color-secondary)' }}>
+            Key columns used by the RL agent: <strong>qty</strong> (demand), <strong>unit_price</strong> (current price),
+            <strong> comp_1</strong> (primary competitor price), <strong>freight_price</strong> (cost proxy),
+            <strong> lag_price</strong> (previous period price), and <strong>month</strong> (seasonality).
+          </Typography>
+        </div>
+
         <div
           style={{
             border: '2px dashed var(--color-subtle)',
@@ -236,6 +258,23 @@ export function DataExplorer() {
         <MetricCard label="Products" value={products.length} />
         <MetricCard label="Categories" value={categories.length} />
         <MetricCard label="Date Range" value={dateRange} />
+      </div>
+
+      {/* Dataset context */}
+      <div style={{
+        border: '1px solid var(--color-blue-200)',
+        borderRadius: '8px',
+        padding: '16px 20px',
+        backgroundColor: 'var(--color-info-subtle)',
+        marginBottom: '24px',
+      }}>
+        <Typography variant="body-sm" style={{ color: 'var(--color-secondary)' }}>
+          <strong>Kaggle Retail Price Optimization</strong> — Monthly product-level data from a Brazilian
+          e-commerce platform. Each row captures demand (<code>qty</code>), pricing (<code>unit_price</code>),
+          shipping cost (<code>freight_price</code>), competitor prices (<code>comp_1/2/3</code>),
+          historical price (<code>lag_price</code>), and time features (<code>month</code>, <code>weekday/weekend/holiday</code>).
+          The RL agent uses these to learn state-dependent pricing strategies.
+        </Typography>
       </div>
 
       {/* Chart filter */}

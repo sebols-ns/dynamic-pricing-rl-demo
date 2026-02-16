@@ -36,10 +36,30 @@ function buildCoalitionState(
   return state;
 }
 
-function getBestPrice(agent: QLearningAgent, env: PricingEnvironment, state: State): number {
+/**
+ * Softmax-weighted expected price. Using the argmax price alone produces 0 Shapley values
+ * when many states share the same best action. The softmax weighting gives a continuous
+ * signal that reflects the *strength* of the agent's preference, not just the winner.
+ */
+function getExpectedPrice(agent: QLearningAgent, env: PricingEnvironment, state: State): number {
   const stateIndex = env.stateToIndex(state);
-  const bestAction = agent.getBestAction(stateIndex);
-  return env.getBasePrice() * ACTION_MULTIPLIERS[bestAction];
+  const qValues = agent.getQValues(stateIndex);
+  const basePrice = env.getBasePrice();
+
+  // Check if Q-values are all zero (untrained) — return base price
+  const maxQ = Math.max(...qValues);
+  if (maxQ <= 0.001) return basePrice;
+
+  // Softmax with temperature — lower temp = sharper distribution
+  const temperature = Math.max(0.05, maxQ * 0.1);
+  const expValues = qValues.map(q => Math.exp((q - maxQ) / temperature));
+  const sumExp = expValues.reduce((s, v) => s + v, 0);
+
+  let expectedPrice = 0;
+  for (let i = 0; i < qValues.length; i++) {
+    expectedPrice += (expValues[i] / sumExp) * basePrice * ACTION_MULTIPLIERS[i];
+  }
+  return expectedPrice;
 }
 
 export function computeShapleyValues(
@@ -48,8 +68,9 @@ export function computeShapleyValues(
   env: PricingEnvironment,
 ): { shapValues: ShapleyValue[]; basePrice: number; finalPrice: number } {
   const baselineState = getBaselineState();
-  const basePrice = getBestPrice(agent, env, baselineState);
-  const finalPrice = getBestPrice(agent, env, actualState);
+  const basePrice = getExpectedPrice(agent, env, baselineState);
+  // finalPrice must also use getExpectedPrice so that basePrice + sum(shapley) = finalPrice
+  const finalPrice = getExpectedPrice(agent, env, actualState);
 
   const shapValues: ShapleyValue[] = [];
   const n = NUM_FEATURES;
@@ -79,8 +100,8 @@ export function computeShapleyValues(
       const withI = new Set(S);
       withI.add(i);
 
-      const priceWithout = getBestPrice(agent, env, buildCoalitionState(S, actualState, baselineState));
-      const priceWith = getBestPrice(agent, env, buildCoalitionState(withI, actualState, baselineState));
+      const priceWithout = getExpectedPrice(agent, env, buildCoalitionState(S, actualState, baselineState));
+      const priceWith = getExpectedPrice(agent, env, buildCoalitionState(withI, actualState, baselineState));
 
       shapValue += weight * (priceWith - priceWithout);
     }

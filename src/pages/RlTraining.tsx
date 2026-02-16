@@ -129,6 +129,12 @@ export function RlTraining({ training }: RlTrainingProps) {
     return sampled;
   }, [training.history]);
 
+  // Explicitly compute chart X domain to avoid Recharts caching stale bounds during streaming
+  const chartXDomain = useMemo<[number, number]>(() => {
+    if (chartData.length === 0) return [0, 100];
+    return [chartData[0].episode, chartData[chartData.length - 1].episode];
+  }, [chartData]);
+
   // Compute static baseline revenue (what 1.0x pricing would yield on average)
   const staticBaselineRevenue = useMemo(() => {
     if (!training.env) return null;
@@ -346,11 +352,11 @@ export function RlTraining({ training }: RlTrainingProps) {
               <ResponsiveContainer width="100%" height={280}>
                 <RechartsLineChart data={chartData} margin={{ top: 8, right: 16, left: 8, bottom: 24 }}>
                   <CartesianGrid strokeDasharray="3 3" stroke="var(--color-neutral-200)" />
-                  <XAxis dataKey="episode" type="number" domain={['dataMin', 'dataMax']} tick={{ fontSize: 11 }} label={{ value: 'Episode', position: 'insideBottom', offset: -12, fontSize: 12 }} />
+                  <XAxis dataKey="episode" type="number" domain={chartXDomain} tick={{ fontSize: 11 }} label={{ value: 'Episode', position: 'insideBottom', offset: -12, fontSize: 12 }} />
                   <YAxis domain={['auto', 'auto']} tick={{ fontSize: 11 }} label={{ value: 'Avg Reward', angle: -90, position: 'insideLeft', offset: 4, fontSize: 12 }} />
                   <RechartsTooltip />
-                  <Line type="monotone" dataKey="smoothReward" stroke={getSeriesColor(0)} strokeWidth={2} dot={false} activeDot={false} />
-                  <Line type="monotone" dataKey="reward" stroke="var(--color-neutral-400)" strokeWidth={1} dot={false} activeDot={false} />
+                  <Line type="monotone" dataKey="smoothReward" stroke={getSeriesColor(0)} strokeWidth={2} dot={false} activeDot={false} isAnimationActive={false} />
+                  <Line type="monotone" dataKey="reward" stroke="var(--color-neutral-400)" strokeWidth={1} dot={false} activeDot={false} isAnimationActive={false} />
                 </RechartsLineChart>
               </ResponsiveContainer>
             </div>
@@ -373,11 +379,11 @@ export function RlTraining({ training }: RlTrainingProps) {
               <ResponsiveContainer width="100%" height={280}>
                 <RechartsLineChart data={revenueChartData} margin={{ top: 8, right: 16, left: 16, bottom: 24 }}>
                   <CartesianGrid strokeDasharray="3 3" stroke="var(--color-neutral-200)" />
-                  <XAxis dataKey="episode" type="number" domain={['dataMin', 'dataMax']} tick={{ fontSize: 11 }} label={{ value: 'Episode', position: 'insideBottom', offset: -12, fontSize: 12 }} />
+                  <XAxis dataKey="episode" type="number" domain={chartXDomain} tick={{ fontSize: 11 }} label={{ value: 'Episode', position: 'insideBottom', offset: -12, fontSize: 12 }} />
                   <YAxis domain={['auto', 'auto']} tick={{ fontSize: 11 }} label={{ value: 'Avg Revenue ($)', angle: -90, position: 'insideLeft', offset: 0, fontSize: 12 }} />
                   <RechartsTooltip formatter={(value: number) => `$${value.toLocaleString()}`} />
-                  <Line type="monotone" dataKey="revenue" stroke={CHART_COLORS.SUCCESS} strokeWidth={2} dot={false} activeDot={false} name="RL Agent" />
-                  <Line type="monotone" dataKey="staticRevenue" stroke="var(--color-neutral-400)" strokeWidth={2} strokeDasharray="6 4" dot={false} activeDot={false} name="Static (1.0x)" />
+                  <Line type="monotone" dataKey="revenue" stroke={CHART_COLORS.SUCCESS} strokeWidth={2} dot={false} activeDot={false} isAnimationActive={false} name="RL Agent" />
+                  <Line type="monotone" dataKey="staticRevenue" stroke="var(--color-neutral-400)" strokeWidth={2} strokeDasharray="6 4" dot={false} activeDot={false} isAnimationActive={false} name="Static (1.0x)" />
                 </RechartsLineChart>
               </ResponsiveContainer>
             </div>

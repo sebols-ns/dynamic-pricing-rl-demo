@@ -64,7 +64,7 @@ function App() {
                 variant="body-sm"
                 style={{ color: 'var(--color-secondary)', marginTop: '4px' }}
               >
-                NorthSlope Technologies — Powered by Q-Learning
+                Northslope Technologies — Powered by Q-Learning
               </Typography>
             </header>
 
