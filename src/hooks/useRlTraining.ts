@@ -14,6 +14,11 @@ interface TrainingState {
   explorationRate: number;
 }
 
+// How many episodes to run before pushing a UI update
+const EPISODES_PER_UI_UPDATE = 5;
+// Minimum ms between UI updates to avoid overwhelming React
+const UI_UPDATE_INTERVAL_MS = 80;
+
 export function useRlTraining() {
   const [state, setState] = useState<TrainingState>({
     isRunning: false,
@@ -24,15 +29,18 @@ export function useRlTraining() {
     explorationRate: 1.0,
   });
 
-  const rafRef = useRef<number>(0);
+  const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const agentRef = useRef<QLearningAgent | null>(null);
   const envRef = useRef<PricingEnvironment | null>(null);
   const episodeRef = useRef(0);
   const historyRef = useRef<EpisodeResult[]>([]);
   const isRunningRef = useRef(false);
-  const speedRef = useRef(1); // episodes per frame
+  const speedRef = useRef(1);
 
   const initialize = useCallback((productRows: RetailRow[], weights: RewardWeights, config?: Partial<TrainingConfig>) => {
+    if (timerRef.current) clearTimeout(timerRef.current);
+    isRunningRef.current = false;
+
     const env = new PricingEnvironment({ productRows, weights });
     const agent = new QLearningAgent(config);
     envRef.current = env;
@@ -49,44 +57,56 @@ export function useRlTraining() {
     });
   }, []);
 
-  const runFrame = useCallback(() => {
+  const flushState = useCallback(() => {
+    // Snapshot current refs into React state (single setState call)
+    const history = historyRef.current;
+    const episode = episodeRef.current;
+    const epsilon = agentRef.current?.epsilon ?? 0;
+    const agent = agentRef.current;
+    const env = envRef.current;
+    setState(prev => ({
+      ...prev,
+      episode,
+      history: history.slice(), // shallow copy for React diffing
+      explorationRate: epsilon,
+      agent,
+      env,
+    }));
+  }, []);
+
+  const runBatch = useCallback(() => {
     if (!isRunningRef.current || !agentRef.current || !envRef.current) return;
 
-    const batchSize = speedRef.current;
-    for (let i = 0; i < batchSize; i++) {
+    const maxEpisodes = agentRef.current.getConfig().episodes;
+    const batchSize = EPISODES_PER_UI_UPDATE * speedRef.current;
+
+    for (let i = 0; i < batchSize && episodeRef.current < maxEpisodes; i++) {
       const result = agentRef.current.runEpisode(envRef.current);
       episodeRef.current++;
       result.episode = episodeRef.current;
       historyRef.current.push(result);
     }
 
-    setState(prev => ({
-      ...prev,
-      episode: episodeRef.current,
-      history: [...historyRef.current],
-      explorationRate: agentRef.current?.epsilon ?? 0,
-      agent: agentRef.current,
-      env: envRef.current,
-    }));
+    flushState();
 
-    if (episodeRef.current < (agentRef.current?.getConfig().episodes ?? DEFAULT_CONFIG.episodes)) {
-      rafRef.current = requestAnimationFrame(runFrame);
+    if (episodeRef.current < maxEpisodes) {
+      timerRef.current = setTimeout(runBatch, UI_UPDATE_INTERVAL_MS);
     } else {
       isRunningRef.current = false;
       setState(prev => ({ ...prev, isRunning: false }));
     }
-  }, []);
+  }, [flushState]);
 
   const play = useCallback(() => {
     if (!agentRef.current || !envRef.current) return;
     isRunningRef.current = true;
     setState(prev => ({ ...prev, isRunning: true }));
-    rafRef.current = requestAnimationFrame(runFrame);
-  }, [runFrame]);
+    timerRef.current = setTimeout(runBatch, 0);
+  }, [runBatch]);
 
   const pause = useCallback(() => {
     isRunningRef.current = false;
-    cancelAnimationFrame(rafRef.current);
+    if (timerRef.current) clearTimeout(timerRef.current);
     setState(prev => ({ ...prev, isRunning: false }));
   }, []);
 
@@ -96,18 +116,11 @@ export function useRlTraining() {
     episodeRef.current++;
     result.episode = episodeRef.current;
     historyRef.current.push(result);
-    setState(prev => ({
-      ...prev,
-      episode: episodeRef.current,
-      history: [...historyRef.current],
-      explorationRate: agentRef.current?.epsilon ?? 0,
-      agent: agentRef.current,
-      env: envRef.current,
-    }));
-  }, []);
+    flushState();
+  }, [flushState]);
 
   const reset = useCallback(() => {
-    cancelAnimationFrame(rafRef.current);
+    if (timerRef.current) clearTimeout(timerRef.current);
     isRunningRef.current = false;
     agentRef.current?.reset();
     episodeRef.current = 0;
