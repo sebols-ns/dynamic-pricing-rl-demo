@@ -242,9 +242,11 @@ export function Backtesting() {
           subtitle={`${formatDollars(summary.totalRlRevenue)} vs ${formatDollars(summary.totalStaticRevenue)}`}
         />
         <MetricCard
-          label="Margin Lift vs Historical"
+          label={datasetName === 'store_inventory' ? 'Margin Lift vs Historical (est.)' : 'Margin Lift vs Historical'}
           value={formatPct(summary.marginLift)}
-          subtitle={`${formatDollars(summary.totalRlMargin)} vs ${formatDollars(summary.totalStaticMargin)}`}
+          subtitle={datasetName === 'store_inventory'
+            ? `${formatDollars(summary.totalRlMargin)} vs ${formatDollars(summary.totalStaticMargin)} · 35% assumed cost`
+            : `${formatDollars(summary.totalRlMargin)} vs ${formatDollars(summary.totalStaticMargin)}`}
         />
         <MetricCard
           label="Avg RL Multiplier"

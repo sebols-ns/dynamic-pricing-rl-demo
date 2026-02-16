@@ -21,7 +21,7 @@ const cardStyle: React.CSSProperties = {
 };
 
 export function PricingLab() {
-  const { isLoaded } = useCsvData();
+  const { isLoaded, datasetName } = useCsvData();
   const { agent, env, isTrained, productId, episode } = useTrainedAgent();
   const [demand, setDemand] = useState(1.0);
   const [competitorPrice, setCompetitorPrice] = useState(1);
@@ -296,7 +296,7 @@ export function PricingLab() {
               subtitle={`${ACTION_MULTIPLIERS[results.bestAction].toFixed(2)}x base`}
             />
             <MetricCard label="Expected Revenue" value={`$${results.rl.revenue.toFixed(0)}`} />
-            <MetricCard label="Expected Margin" value={`$${results.rl.margin.toFixed(0)}`} />
+            <MetricCard label={datasetName === 'store_inventory' ? 'Expected Margin (est.)' : 'Expected Margin'} value={`$${results.rl.margin.toFixed(0)}`} />
             <MetricCard label="Base Price" value={`$${results.basePrice.toFixed(2)}`} />
           </div>
 
@@ -316,7 +316,7 @@ export function PricingLab() {
           >
             {[
               { data: comparisonData.revenue, title: 'Revenue — Current Conditions', label: 'Revenue ($)', color: CHART_COLORS.PRIMARY, lift: comparisonData.revLift },
-              { data: comparisonData.margin, title: 'Margin — Current Conditions', label: 'Margin ($)', color: CHART_COLORS.SUCCESS, lift: comparisonData.marginLift },
+              { data: comparisonData.margin, title: datasetName === 'store_inventory' ? 'Margin (est.) — Current Conditions' : 'Margin — Current Conditions', label: 'Margin ($)', color: CHART_COLORS.SUCCESS, lift: comparisonData.marginLift },
             ].map(chart => {
               const values = chart.data.map(d => d.value);
               const min = Math.min(...values);
@@ -373,7 +373,7 @@ export function PricingLab() {
               >
                 {[
                   { data: aggregateComparison.revenue, title: 'Avg Revenue — All Conditions', label: 'Revenue ($)', color: CHART_COLORS.PRIMARY, lift: aggregateComparison.revLift },
-                  { data: aggregateComparison.margin, title: 'Avg Margin — All Conditions', label: 'Margin ($)', color: CHART_COLORS.SUCCESS, lift: aggregateComparison.marginLift },
+                  { data: aggregateComparison.margin, title: datasetName === 'store_inventory' ? 'Avg Margin (est.) — All Conditions' : 'Avg Margin — All Conditions', label: 'Margin ($)', color: CHART_COLORS.SUCCESS, lift: aggregateComparison.marginLift },
                 ].map(chart => {
                   const values = chart.data.map(d => d.value);
                   const min = Math.min(...values);
