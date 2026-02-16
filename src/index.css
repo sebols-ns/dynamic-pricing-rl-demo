@@ -1,0 +1,13 @@
+@import "tailwindcss";
+@import "../node_modules/@northslopetech/altitude-ui/dist/tokens.css";
+
+body {
+  margin: 0;
+  background: var(--color-light);
+  color: var(--color-dark);
+  font-family: var(--font-family-body, system-ui, -apple-system, sans-serif);
+}
+
+#root {
+  min-height: 100vh;
+}
