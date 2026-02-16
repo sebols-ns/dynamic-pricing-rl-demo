@@ -131,17 +131,16 @@ export function DataExplorer() {
             <Button onClick={loadSampleData} disabled={isLoading}>
               {isLoading ? 'Loading...' : 'Load Sample Data'}
             </Button>
-            <label>
-              <Button variant="outline" asChild>
-                <span>Upload CSV</span>
-              </Button>
-              <input
-                type="file"
-                accept=".csv"
-                className="hidden"
-                onChange={e => handleFileInput(e.target.files)}
-              />
-            </label>
+            <Button variant="outline" onClick={() => document.getElementById('csv-upload')?.click()}>
+              Upload CSV
+            </Button>
+            <input
+              id="csv-upload"
+              type="file"
+              accept=".csv"
+              className="hidden"
+              onChange={e => handleFileInput(e.target.files)}
+            />
           </div>
         </div>
       </div>
