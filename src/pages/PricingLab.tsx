@@ -10,7 +10,7 @@ import {
 import { useCsvData } from '../hooks/useCsvData';
 import { useTrainedAgent } from '../hooks/useTrainedAgent';
 import { MetricCard } from '../components/MetricCard';
-import type { RewardWeights, State } from '../types/rl';
+import type { State } from '../types/rl';
 import { ACTION_MULTIPLIERS, NUM_ACTIONS, DEMAND_BINS, COMPETITOR_BINS, SEASON_BINS, LAG_PRICE_BINS } from '../types/rl';
 
 const cardStyle: React.CSSProperties = {
@@ -26,7 +26,6 @@ export function PricingLab() {
   const [demand, setDemand] = useState(1.0);
   const [competitorPrice, setCompetitorPrice] = useState(1);
   const [season, setSeason] = useState(2);
-  const [weights, setWeights] = useState<RewardWeights>({ revenue: 0.4, margin: 0.4, volume: 0.2 });
 
   const results = useMemo(() => {
     if (!agent || !env || !isTrained) return null;
@@ -241,46 +240,6 @@ export function PricingLab() {
           </div>
         </div>
 
-        {/* Objective Weights */}
-        <div style={cardStyle}>
-          <Typography variant="heading-sm" style={{ marginBottom: '8px' }}>Objective Weights</Typography>
-          <Typography variant="body-xs" style={{ color: 'var(--color-secondary)', marginBottom: '20px' }}>
-            Adjust how the agent balances competing objectives. Weights are normalized.
-          </Typography>
-
-          {[
-            { key: 'revenue' as const, label: 'Revenue', color: 'var(--color-blue-500)' },
-            { key: 'margin' as const, label: 'Margin', color: 'var(--color-green-500)' },
-            { key: 'volume' as const, label: 'Volume', color: 'var(--color-yellow-500)' },
-          ].map(({ key, label, color }) => (
-            <div key={key} style={{ marginBottom: '16px' }}>
-              <div className="flex justify-between" style={{ marginBottom: '6px' }}>
-                <Typography variant="label-sm-bold">{label}</Typography>
-                <Typography variant="label-sm" style={{ color }}>{(weights[key] * 100).toFixed(0)}%</Typography>
-              </div>
-              <input
-                type="range" min={0} max={1} step={0.05} value={weights[key]}
-                onChange={e => {
-                  const v = Number(e.target.value);
-                  const others = Object.entries(weights).filter(([k]) => k !== key);
-                  const otherTotal = others.reduce((s, [, val]) => s + val, 0);
-                  const total = v + otherTotal;
-                  if (total > 0) {
-                    setWeights(prev => {
-                      const next = { ...prev };
-                      next[key] = v / total;
-                      for (const [k, val] of others) {
-                        next[k as keyof RewardWeights] = val / total;
-                      }
-                      return next;
-                    });
-                  }
-                }}
-                style={{ width: '100%' }}
-              />
-            </div>
-          ))}
-        </div>
       </div>
 
       {/* Results */}
