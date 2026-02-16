@@ -200,7 +200,7 @@ export function RlTraining({ training }: RlTrainingProps) {
         <div style={{ display: 'flex', alignItems: 'stretch', gap: '0', overflow: 'auto' }}>
           {[
             { title: 'Raw Data', color: 'var(--color-blue-100)', fields: ['unit_price', 'qty', 'freight_price', 'comp_1', 'lag_price', 'month'] },
-            { title: 'Feature Extraction', color: 'var(--color-purple-100)', fields: ['Demand level', 'Competitor ratio', 'Seasonality', 'Price history'] },
+            { title: 'Feature Extraction', color: 'var(--color-info-subtle)', fields: ['Demand level', 'Competitor ratio', 'Seasonality', 'Price history'] },
             { title: 'State Discretization', color: 'var(--color-yellow-100)', fields: ['3 demand bins', '3 competitor bins', '4 season bins', '3 lag-price bins'] },
             { title: 'Q-Learning Agent', color: 'var(--color-green-100)', fields: ['108 states x 12 actions', 'Reward = f(rev, margin, vol)', 'Epsilon-greedy exploration'] },
             { title: 'Pricing Decision', color: 'var(--color-success-subtle)', fields: ['Optimal multiplier', 'Per-state policy', 'Adapts to conditions'] },

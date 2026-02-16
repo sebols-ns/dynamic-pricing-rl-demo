@@ -69,25 +69,20 @@ function App() {
             >
               <div className="flex items-center justify-between">
                 <div className="flex items-center" style={{ gap: '14px' }}>
-                  {/* Northslope mountain mark */}
-                  <svg width="28" height="24" viewBox="0 0 100 85" fill="var(--color-dark)">
-                    <polygon points="50,0 100,80 83,80 50,28 17,80 0,80" />
-                    <polygon points="50,44 75,80 62,80 50,60 38,80 25,80" />
-                  </svg>
-                  <div>
-                    <div className="flex items-center" style={{ gap: '10px' }}>
-                      <Typography variant="heading-sm" as="h1" style={{ fontWeight: 700 }}>
-                        Dynamic Pricing
-                      </Typography>
-                      <Badge variant="neutral">RL Demo</Badge>
-                    </div>
-                    <Typography
-                      variant="body-xs"
-                      style={{ color: 'var(--color-secondary)', marginTop: '2px' }}
-                    >
-                      Northslope Technologies
-                    </Typography>
-                  </div>
+                  {/* Northslope logo */}
+                  <img
+                    src={`${import.meta.env.BASE_URL}northslope-logo.png`}
+                    alt="Northslope"
+                    style={{
+                      height: '28px',
+                      filter: isDark ? 'invert(1)' : 'none',
+                    }}
+                  />
+                  <div style={{ height: '24px', width: '1px', backgroundColor: 'var(--color-subtle)' }} />
+                  <Typography variant="heading-sm" as="h1" style={{ fontWeight: 600 }}>
+                    Dynamic Pricing
+                  </Typography>
+                  <Badge variant="neutral">RL Demo</Badge>
                 </div>
                 <div className="flex items-center" style={{ gap: '8px' }}>
                   {/* Dark mode toggle */}

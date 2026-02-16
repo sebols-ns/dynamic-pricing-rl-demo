@@ -1,9 +1,13 @@
 import { useCallback, useMemo, useState } from 'react';
 import {
-  Typography, Button, BarChart, LineChart, Table, Badge,
+  Typography, Button, BarChart, Table, Badge,
   Select, SelectTrigger, SelectValue, SelectContent, SelectItem,
-  CHART_COLORS, getSeriesColor,
+  CHART_COLORS,
 } from '@northslopetech/altitude-ui';
+import {
+  ResponsiveContainer, LineChart, Line, XAxis, YAxis, CartesianGrid,
+  Tooltip as RechartsTooltip,
+} from 'recharts';
 import {
   useReactTable,
   getCoreRowModel,
@@ -113,19 +117,16 @@ export function DataExplorer() {
     const maxPoints = 30;
     let entries = sorted;
     if (entries.length > maxPoints) {
-      const step = entries.length / maxPoints;
+      const step = (entries.length - 1) / (maxPoints - 1);
       const sampled = [];
       for (let i = 0; i < maxPoints; i++) {
-        sampled.push(entries[Math.floor(i * step)]);
+        sampled.push(entries[Math.round(i * step)]);
       }
-      sampled.push(entries[entries.length - 1]);
       entries = sampled;
     }
 
-    // Show labels at intervals for a clean x-axis (~8-10 labels max)
-    const labelInterval = Math.max(1, Math.ceil(entries.length / 10));
-    return entries.map(([date, { total, count }], i) => ({
-      date: i % labelInterval === 0 || i === entries.length - 1 ? date : '',
+    return entries.map(([date, { total, count }]) => ({
+      date,
       avgPrice: Math.round((total / count) * 100) / 100,
     }));
   }, [chartRows, isLoaded]);
@@ -307,14 +308,45 @@ export function DataExplorer() {
           />
         )}
         {priceTrends.length > 0 && (
-          <LineChart
-            data={priceTrends}
-            xAxisKey="date"
-            series={[{ dataKey: 'avgPrice', color: getSeriesColor(0), strokeWidth: 2, dot: false }]}
-            title={`Avg Price Over Time${chartProduct !== 'all' ? ` — ${chartProduct}` : ''}`}
-            xAxisLabel="Date"
-            yAxisLabel="Avg Price ($)"
-          />
+          <div>
+            <Typography variant="label-md-bold" style={{ marginBottom: '8px' }}>
+              {`Avg Price Over Time${chartProduct !== 'all' ? ` — ${chartProduct}` : ''}`}
+            </Typography>
+            <ResponsiveContainer width="100%" height={300}>
+              <LineChart data={priceTrends}>
+                <CartesianGrid strokeDasharray="3 3" stroke="var(--color-neutral-300)" />
+                <XAxis
+                  dataKey="date"
+                  tick={{ fontSize: 11, fill: 'var(--color-secondary)' }}
+                  interval={Math.max(0, Math.ceil(priceTrends.length / 8) - 1)}
+                  angle={-30}
+                  textAnchor="end"
+                  height={50}
+                />
+                <YAxis
+                  domain={['auto', 'auto']}
+                  tick={{ fontSize: 11, fill: 'var(--color-secondary)' }}
+                  label={{ value: 'Avg Price ($)', angle: -90, position: 'insideLeft', offset: 4, fontSize: 12, fill: 'var(--color-secondary)' }}
+                />
+                <RechartsTooltip
+                  contentStyle={{
+                    backgroundColor: 'var(--color-base-white)',
+                    borderColor: 'var(--color-subtle)',
+                    color: 'var(--color-dark)',
+                  }}
+                  formatter={((value: number) => [`$${value.toFixed(2)}`, 'Avg Price']) as any}
+                />
+                <Line
+                  type="monotone"
+                  dataKey="avgPrice"
+                  stroke={CHART_COLORS.PRIMARY}
+                  strokeWidth={2}
+                  dot={false}
+                  isAnimationActive={false}
+                />
+              </LineChart>
+            </ResponsiveContainer>
+          </div>
         )}
       </div>
 

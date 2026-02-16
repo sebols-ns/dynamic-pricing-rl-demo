@@ -1,4 +1,4 @@
-import { useMemo } from 'react';
+import { useMemo, useSyncExternalStore } from 'react';
 import { Typography } from '@northslopetech/altitude-ui';
 import type { QLearningAgent } from '../engine/q-learning';
 import { ACTION_MULTIPLIERS, TOTAL_STATES, NUM_ACTIONS } from '../types/rl';
@@ -8,15 +8,27 @@ interface QTableHeatmapProps {
   episode: number; // forces re-computation when training progresses
 }
 
-function getColor(value: number, min: number, max: number): string {
-  if (max === min) return 'hsl(210, 50%, 85%)';
+function getColor(value: number, min: number, max: number, dark?: boolean): string {
+  if (max === min) return dark ? 'hsl(210, 40%, 25%)' : 'hsl(210, 50%, 85%)';
   const t = (value - min) / (max - min);
   const hue = 210 + t * (140 - 210);
+  if (dark) {
+    const lightness = 18 + t * 30;
+    return `hsl(${hue}, 60%, ${lightness}%)`;
+  }
   const lightness = 90 - t * 45;
   return `hsl(${hue}, 70%, ${lightness}%)`;
 }
 
+const subscribeDark = (cb: () => void) => {
+  const obs = new MutationObserver(cb);
+  obs.observe(document.documentElement, { attributes: true, attributeFilter: ['class'] });
+  return () => obs.disconnect();
+};
+const getIsDark = () => document.documentElement.classList.contains('dark');
+
 export function QTableHeatmap({ agent, episode }: QTableHeatmapProps) {
+  const isDark = useSyncExternalStore(subscribeDark, getIsDark);
   const { cells, topStates, globalMin, globalMax } = useMemo(() => {
     const stateMaxQ: { stateIdx: number; maxQ: number }[] = [];
     for (let s = 0; s < TOTAL_STATES; s++) {
@@ -103,7 +115,7 @@ export function QTableHeatmap({ agent, episode }: QTableHeatmapProps) {
                     width={cellW - 2}
                     height={cellH - 2}
                     rx={4}
-                    fill={getColor(cell.value, globalMin, globalMax)}
+                    fill={getColor(cell.value, globalMin, globalMax, isDark)}
                     stroke={isMax ? 'var(--color-dark)' : 'none'}
                     strokeWidth={isMax ? 1.5 : 0}
                     style={{ transition: 'fill 0.4s ease' }}
@@ -114,7 +126,7 @@ export function QTableHeatmap({ agent, episode }: QTableHeatmapProps) {
                       y={headerHeight + row * cellH + (cellH - 2) / 2 + 4}
                       textAnchor="middle"
                       fontSize={8}
-                      fill="var(--color-secondary)"
+                      fill={isDark ? '#ccc' : 'var(--color-secondary)'}
                     >
                       {cell.value !== 0 ? cell.value.toFixed(2) : ''}
                     </text>
@@ -130,8 +142,8 @@ export function QTableHeatmap({ agent, episode }: QTableHeatmapProps) {
           <text fontSize={9} fill="var(--color-secondary)" fontWeight={600} y={-4}>Q-value</text>
           <defs>
             <linearGradient id="heatmapGrad" x1="0" y1="1" x2="0" y2="0">
-              <stop offset="0%" stopColor={getColor(globalMin, globalMin, globalMax)} />
-              <stop offset="100%" stopColor={getColor(globalMax, globalMin, globalMax)} />
+              <stop offset="0%" stopColor={getColor(globalMin, globalMin, globalMax, isDark)} />
+              <stop offset="100%" stopColor={getColor(globalMax, globalMin, globalMax, isDark)} />
             </linearGradient>
           </defs>
           <rect x={0} y={0} width={12} height={numRows * cellH - 10} rx={3} fill="url(#heatmapGrad)" />
