@@ -17,7 +17,6 @@ import {
   type SortingState,
 } from '@tanstack/react-table';
 import { useCsvData } from '../hooks/useCsvData';
-import type { DatasetName } from '../hooks/useCsvData';
 import { MetricCard } from '../components/MetricCard';
 import type { RetailRow } from '../types/data';
 import { compareMonthYear } from '../utils/math';
@@ -269,42 +268,8 @@ export function DataExplorer() {
     <div style={{ padding: '32px 0' }}>
       <div className="flex items-center justify-between" style={{ marginBottom: '24px' }}>
         <Typography variant="heading-lg">Data Explorer</Typography>
-        <div className="flex items-center" style={{ gap: '12px' }}>
-          <div
-            style={{
-              display: 'inline-flex',
-              borderRadius: '6px',
-              border: '1px solid var(--color-subtle)',
-              overflow: 'hidden',
-            }}
-          >
-            {([
-              { key: 'retail_price' as DatasetName, label: 'Retail Price' },
-              { key: 'store_inventory' as DatasetName, label: 'Store Inventory' },
-            ]).map(({ key, label }) => (
-              <button
-                key={key}
-                onClick={() => {
-                  if (key === datasetName || isLoading) return;
-                  if (key === 'retail_price') loadSampleData();
-                  else loadInventoryData();
-                }}
-                disabled={isLoading}
-                style={{
-                  padding: '6px 14px',
-                  fontSize: '13px',
-                  fontWeight: 500,
-                  cursor: key === datasetName ? 'default' : 'pointer',
-                  border: 'none',
-                  backgroundColor: key === datasetName ? 'var(--color-interactive)' : 'var(--color-base-white)',
-                  color: key === datasetName ? 'white' : 'var(--color-dark)',
-                  transition: 'background-color 0.15s',
-                }}
-              >
-                {label}
-              </button>
-            ))}
-          </div>
+        <div className="flex items-center" style={{ gap: '8px' }}>
+          <Badge variant="neutral">{datasetName === 'store_inventory' ? 'Store Inventory' : 'Retail Price'}</Badge>
           <Badge variant="success">{rows.length.toLocaleString()} rows loaded</Badge>
         </div>
       </div>

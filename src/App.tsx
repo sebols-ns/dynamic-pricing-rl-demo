@@ -159,6 +159,7 @@ function App() {
             {/* Tabs */}
             <Tabs value={activeTab} onValueChange={setActiveTab}>
               <div
+                className="flex items-center justify-between"
                 style={{
                   borderBottom: '1px solid var(--color-subtle)',
                   padding: '0 32px',
@@ -173,6 +174,61 @@ function App() {
                   <TabsTrigger value="explainability">Explainability</TabsTrigger>
                   <TabsTrigger value="learn">Learn</TabsTrigger>
                 </TabsList>
+
+                {/* Dataset switcher */}
+                {csvData.isLoaded && (
+                  <div className="flex items-center" style={{ gap: '4px', padding: '6px 0' }}>
+                    <button
+                      onClick={() => {
+                        if (csvData.datasetName !== 'retail_price' && !csvData.isLoading) {
+                          csvData.loadSampleData();
+                        }
+                      }}
+                      style={{
+                        padding: '4px 12px',
+                        borderRadius: '6px 0 0 6px',
+                        border: '1px solid var(--color-subtle)',
+                        borderRight: 'none',
+                        fontSize: '12px',
+                        fontWeight: csvData.datasetName === 'retail_price' ? 600 : 400,
+                        backgroundColor: csvData.datasetName === 'retail_price'
+                          ? 'var(--color-interactive)'
+                          : 'var(--color-base-white)',
+                        color: csvData.datasetName === 'retail_price'
+                          ? 'white'
+                          : 'var(--color-secondary)',
+                        cursor: csvData.datasetName === 'retail_price' ? 'default' : 'pointer',
+                        transition: 'all 0.15s',
+                      }}
+                    >
+                      Retail Price
+                    </button>
+                    <button
+                      onClick={() => {
+                        if (csvData.datasetName !== 'store_inventory' && !csvData.isLoading) {
+                          csvData.loadInventoryData();
+                        }
+                      }}
+                      style={{
+                        padding: '4px 12px',
+                        borderRadius: '0 6px 6px 0',
+                        border: '1px solid var(--color-subtle)',
+                        fontSize: '12px',
+                        fontWeight: csvData.datasetName === 'store_inventory' ? 600 : 400,
+                        backgroundColor: csvData.datasetName === 'store_inventory'
+                          ? 'var(--color-interactive)'
+                          : 'var(--color-base-white)',
+                        color: csvData.datasetName === 'store_inventory'
+                          ? 'white'
+                          : 'var(--color-secondary)',
+                        cursor: csvData.datasetName === 'store_inventory' ? 'default' : 'pointer',
+                        transition: 'all 0.15s',
+                      }}
+                    >
+                      Store Inventory
+                    </button>
+                  </div>
+                )}
               </div>
 
               <main style={{ maxWidth: '1280px', margin: '0 auto', padding: '0 32px' }}>
