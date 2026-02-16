@@ -15,6 +15,8 @@ export class QLearningAgent {
     this.totalStates = TOTAL_STATES;
     this.numActions = NUM_ACTIONS;
     this.qTable = new Float64Array(this.totalStates * this.numActions);
+    // Optimistic initialization encourages exploration of all actions
+    this.qTable.fill(0.5);
     this.epsilon = this.config.epsilonStart;
   }
 
@@ -67,7 +69,7 @@ export class QLearningAgent {
     );
   }
 
-  runEpisode(env: PricingEnvironment, stepsPerEpisode: number = 50): EpisodeResult & { explorationCount: number } {
+  runEpisode(env: PricingEnvironment, stepsPerEpisode: number = 100): EpisodeResult & { explorationCount: number } {
     let state = env.reset();
     let stateIndex = env.stateToIndex(state);
     let totalReward = 0;
@@ -100,7 +102,7 @@ export class QLearningAgent {
   }
 
   reset(): void {
-    this.qTable.fill(0);
+    this.qTable.fill(0.5);
     this.epsilon = this.config.epsilonStart;
   }
 

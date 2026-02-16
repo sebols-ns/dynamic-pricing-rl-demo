@@ -6,10 +6,15 @@ import {
   CHART_COLORS, getSeriesColor,
 } from '@northslopetech/altitude-ui';
 import { useCsvData } from '../hooks/useCsvData';
-import { useRlTraining } from '../hooks/useRlTraining';
+import type { useRlTraining } from '../hooks/useRlTraining';
+import { useTrainedAgent } from '../hooks/useTrainedAgent';
 import { QTableHeatmap } from '../components/QTableHeatmap';
 import { MetricCard } from '../components/MetricCard';
 import type { RewardWeights } from '../types/rl';
+
+interface RlTrainingProps {
+  training: ReturnType<typeof useRlTraining>;
+}
 
 const cardStyle: React.CSSProperties = {
   border: '1px solid var(--color-subtle)',
@@ -45,9 +50,9 @@ function RlTerm({ term, definition, children }: { term: string; definition: stri
   );
 }
 
-export function RlTraining() {
+export function RlTraining({ training }: RlTrainingProps) {
   const { rows, products, isLoaded } = useCsvData();
-  const training = useRlTraining();
+  const trainedCtx = useTrainedAgent();
   const [selectedProduct, setSelectedProduct] = useState<string>('');
   const [speed, setSpeed] = useState(1);
   const [weights] = useState<RewardWeights>({ revenue: 0.4, margin: 0.4, volume: 0.2 });
@@ -71,23 +76,56 @@ export function RlTraining() {
     }
   }, [isLoaded, products, selectedProduct]);
 
-  const rewardChartData = useMemo(() => {
-    return training.history.map(h => ({
-      episode: h.episode,
-      reward: Math.round(h.avgReward * 1000) / 1000,
-      epsilon: Math.round(h.epsilon * 100) / 100,
-    }));
+  // Publish trained agent to shared context for Pricing Lab / Explainability
+  useEffect(() => {
+    if (training.agent && training.env && selectedProduct && training.episode > 0) {
+      trainedCtx.setTrained(training.agent, training.env, selectedProduct, training.episode);
+    }
+  }, [training.agent, training.env, training.episode, selectedProduct]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Downsample chart data — show at most ~80 points for clean charts
+  const chartData = useMemo(() => {
+    const hist = training.history;
+    if (hist.length === 0) return [];
+
+    // Compute smoothed values on full data first
+    const smoothWindow = Math.max(5, Math.floor(hist.length / 20));
+    const full = hist.map((h, i) => {
+      const start = Math.max(0, i - smoothWindow + 1);
+      const slice = hist.slice(start, i + 1);
+      const avg = slice.reduce((s, v) => s + v.avgReward, 0) / slice.length;
+      return {
+        episode: h.episode,
+        reward: Math.round(h.avgReward * 1000) / 1000,
+        smoothReward: Math.round(avg * 1000) / 1000,
+        epsilon: Math.round(h.epsilon * 1000) / 1000,
+      };
+    });
+
+    // Downsample to ~80 points max
+    const maxPoints = 80;
+    if (full.length <= maxPoints) return full.map(p => ({ ...p, episode: Math.round(p.episode) }));
+    const step = full.length / maxPoints;
+    const sampled = [];
+    const seen = new Set<number>();
+    for (let i = 0; i < maxPoints; i++) {
+      const point = full[Math.floor(i * step)];
+      const ep = Math.round(point.episode);
+      if (!seen.has(ep)) {
+        seen.add(ep);
+        sampled.push({ ...point, episode: ep });
+      }
+    }
+    // Always include the last point
+    const lastEp = Math.round(full[full.length - 1].episode);
+    if (!seen.has(lastEp)) {
+      sampled.push({ ...full[full.length - 1], episode: lastEp });
+    }
+    return sampled;
   }, [training.history]);
 
-  const smoothedData = useMemo(() => {
-    const window = 10;
-    return rewardChartData.map((d, i) => {
-      const start = Math.max(0, i - window + 1);
-      const slice = rewardChartData.slice(start, i + 1);
-      const avg = slice.reduce((s, v) => s + v.reward, 0) / slice.length;
-      return { ...d, smoothReward: Math.round(avg * 1000) / 1000 };
-    });
-  }, [rewardChartData]);
+  const maxEpisodes = training.agent?.getConfig().episodes ?? 500;
+  const progress = Math.round((training.episode / maxEpisodes) * 100);
 
   if (!isLoaded) {
     return (
@@ -183,6 +221,31 @@ export function RlTraining() {
         </div>
       </div>
 
+      {/* Progress Bar */}
+      {(training.isRunning || training.episode > 0) && (
+        <div style={{ marginBottom: '24px' }}>
+          <div className="flex items-center justify-between" style={{ marginBottom: '6px' }}>
+            <Typography variant="label-sm-bold">
+              {training.isRunning ? 'Training...' : training.earlyStopped ? `Converged at episode ${training.earlyStoppedAt}` : training.episode >= maxEpisodes ? 'Training Complete' : 'Paused'}
+            </Typography>
+            <Typography variant="label-sm" style={{ color: 'var(--color-secondary)' }}>
+              {training.episode} / {maxEpisodes} episodes ({progress}%)
+            </Typography>
+          </div>
+          <div style={{ height: '6px', borderRadius: '3px', backgroundColor: 'var(--color-neutral-200)', overflow: 'hidden' }}>
+            <div
+              style={{
+                width: `${progress}%`,
+                height: '100%',
+                borderRadius: '3px',
+                backgroundColor: (training.earlyStopped || training.episode >= maxEpisodes) ? 'var(--color-success)' : 'var(--color-interactive)',
+                transition: 'width 0.3s ease',
+              }}
+            />
+          </div>
+        </div>
+      )}
+
       {/* Metrics */}
       <div
         style={{
@@ -195,7 +258,7 @@ export function RlTraining() {
         <MetricCard label="Episode" value={training.episode} />
         <MetricCard label="Avg Reward" value={lastResult?.avgReward.toFixed(3) ?? '—'} />
         <MetricCard label="Epsilon" value={training.explorationRate.toFixed(4)} />
-        <MetricCard label="Total Steps" value={(training.episode * 50).toLocaleString()} />
+        <MetricCard label="Total Steps" value={(training.episode * 100).toLocaleString()} />
       </div>
 
       {/* Charts */}
@@ -207,12 +270,12 @@ export function RlTraining() {
           marginBottom: '32px',
         }}
       >
-        {smoothedData.length > 0 && (
+        {chartData.length > 0 && (
           <LineChart
-            data={smoothedData}
+            data={chartData}
             xAxisKey="episode"
             series={[
-              { dataKey: 'smoothReward', color: getSeriesColor(0), strokeWidth: 2 },
+              { dataKey: 'smoothReward', color: getSeriesColor(0), strokeWidth: 2, dot: false },
               { dataKey: 'reward', color: 'var(--color-neutral-400)', strokeWidth: 1, dot: false },
             ]}
             title="Reward per Episode"
@@ -220,16 +283,16 @@ export function RlTraining() {
             yAxisLabel="Avg Reward"
             showLegend
             legendItems={[
-              { key: 'smoothed', label: 'Smoothed (10-ep)', color: getSeriesColor(0) },
+              { key: 'smoothed', label: 'Smoothed', color: getSeriesColor(0) },
               { key: 'raw', label: 'Raw', color: 'var(--color-neutral-400)' },
             ]}
           />
         )}
-        {smoothedData.length > 0 && (
+        {chartData.length > 0 && (
           <LineChart
-            data={smoothedData}
+            data={chartData}
             xAxisKey="episode"
-            series={[{ dataKey: 'epsilon', color: CHART_COLORS.WARNING, strokeWidth: 2 }]}
+            series={[{ dataKey: 'epsilon', color: CHART_COLORS.WARNING, strokeWidth: 2, dot: false }]}
             title="Epsilon Decay"
             xAxisLabel="Episode"
             yAxisLabel="Epsilon"
@@ -240,7 +303,7 @@ export function RlTraining() {
       {/* Q-Table Heatmap */}
       {training.agent && (
         <div style={cardStyle}>
-          <QTableHeatmap agent={training.agent} />
+          <QTableHeatmap agent={training.agent} episode={training.episode} />
         </div>
       )}
     </div>

@@ -55,20 +55,21 @@ export class PricingEnvironment {
     const prices = this.rows.map(r => r.unit_price);
     const priceStd = Math.sqrt(prices.reduce((s, p) => s + (p - this.basePrice) ** 2, 0) / prices.length);
     const qtyMean = this.baseQty;
-    this.elasticity = priceStd > 0 ? Math.min(2.0, Math.max(0.5, qtyMean / (priceStd * 10))) : 1.0;
+    // Elasticity: price increases should meaningfully reduce demand so agent learns to optimize
+    this.elasticity = priceStd > 0 ? Math.min(2.5, Math.max(0.8, qtyMean / (priceStd * 10))) : 1.2;
 
-    // Precompute normalization ranges
+    // Precompute normalization ranges — tighter ranges give better reward gradient
     const minMult = ACTION_MULTIPLIERS[0];
     const maxMult = ACTION_MULTIPLIERS[ACTION_MULTIPLIERS.length - 1];
     this.revenueRange = {
-      min: this.basePrice * minMult * this.baseQty * 0.3,
-      max: this.basePrice * maxMult * this.baseQty * 1.5,
+      min: this.basePrice * minMult * this.baseQty * 0.5,
+      max: this.basePrice * maxMult * this.baseQty * 1.2,
     };
     this.marginRange = {
-      min: (this.basePrice * minMult - this.baseCost) * this.baseQty * 0.3,
-      max: (this.basePrice * maxMult - this.baseCost) * this.baseQty * 1.5,
+      min: (this.basePrice * minMult - this.baseCost) * this.baseQty * 0.5,
+      max: (this.basePrice * maxMult - this.baseCost) * this.baseQty * 1.2,
     };
-    this.volumeRange = { min: this.baseQty * 0.2, max: this.baseQty * 2.0 };
+    this.volumeRange = { min: this.baseQty * 0.4, max: this.baseQty * 1.5 };
   }
 
   getState(row: RetailRow): State {
@@ -168,9 +169,12 @@ export class PricingEnvironment {
     const multiplier = ACTION_MULTIPLIERS[action];
     const price = this.basePrice * multiplier;
 
-    const demandFactor = overrides?.demandMultiplier ?? (1 + state.demandBin * 0.15);
+    // Use the same demand model as step() for consistency
+    // Scale baseQty by demand bin (higher bin = higher demand)
+    const demandFactor = overrides?.demandMultiplier ?? (0.5 + state.demandBin * 0.3);
+    const baseQ = this.baseQty * demandFactor;
     const priceChangeRatio = (price - this.basePrice) / (this.basePrice || 1);
-    const predictedQty = Math.max(1, this.baseQty * demandFactor * Math.exp(-this.elasticity * priceChangeRatio));
+    const predictedQty = Math.max(1, baseQ * Math.exp(-this.elasticity * priceChangeRatio));
 
     const revenue = price * predictedQty;
     const margin = (price - this.baseCost) * predictedQty;

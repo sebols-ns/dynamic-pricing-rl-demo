@@ -12,6 +12,8 @@ interface TrainingState {
   agent: QLearningAgent | null;
   env: PricingEnvironment | null;
   explorationRate: number;
+  earlyStopped: boolean;
+  earlyStoppedAt: number | null;
 }
 
 // How many episodes to run before pushing a UI update
@@ -27,6 +29,8 @@ export function useRlTraining() {
     agent: null,
     env: null,
     explorationRate: 1.0,
+    earlyStopped: false,
+    earlyStoppedAt: null,
   });
 
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -36,6 +40,9 @@ export function useRlTraining() {
   const historyRef = useRef<EpisodeResult[]>([]);
   const isRunningRef = useRef(false);
   const speedRef = useRef(1);
+  const bestRollingAvgRef = useRef(-Infinity);
+  const noImprovementCountRef = useRef(0);
+  const earlyStoppedRef = useRef(false);
 
   const initialize = useCallback((productRows: RetailRow[], weights: RewardWeights, config?: Partial<TrainingConfig>) => {
     if (timerRef.current) clearTimeout(timerRef.current);
@@ -47,6 +54,9 @@ export function useRlTraining() {
     agentRef.current = agent;
     episodeRef.current = 0;
     historyRef.current = [];
+    bestRollingAvgRef.current = -Infinity;
+    noImprovementCountRef.current = 0;
+    earlyStoppedRef.current = false;
     setState({
       isRunning: false,
       episode: 0,
@@ -54,6 +64,8 @@ export function useRlTraining() {
       agent,
       env,
       explorationRate: agent.epsilon,
+      earlyStopped: false,
+      earlyStoppedAt: null,
     });
   }, []);
 
@@ -71,6 +83,8 @@ export function useRlTraining() {
       explorationRate: epsilon,
       agent,
       env,
+      earlyStopped: earlyStoppedRef.current,
+      earlyStoppedAt: earlyStoppedRef.current ? episode : prev.earlyStoppedAt,
     }));
   }, []);
 
@@ -80,20 +94,44 @@ export function useRlTraining() {
     const maxEpisodes = agentRef.current.getConfig().episodes;
     const batchSize = EPISODES_PER_UI_UPDATE * speedRef.current;
 
+    const config = agentRef.current.getConfig();
+    let converged = false;
+
     for (let i = 0; i < batchSize && episodeRef.current < maxEpisodes; i++) {
       const result = agentRef.current.runEpisode(envRef.current);
       episodeRef.current++;
       result.episode = episodeRef.current;
       historyRef.current.push(result);
+
+      // Convergence check: rolling average of last 50 episodes
+      const hist = historyRef.current;
+      if (hist.length >= 50) {
+        const recent = hist.slice(-50);
+        const rollingAvg = recent.reduce((s, r) => s + r.avgReward, 0) / recent.length;
+        if (rollingAvg > bestRollingAvgRef.current + config.earlyStopThreshold) {
+          bestRollingAvgRef.current = rollingAvg;
+          noImprovementCountRef.current = 0;
+        } else {
+          noImprovementCountRef.current++;
+        }
+        if (noImprovementCountRef.current >= config.earlyStopPatience) {
+          converged = true;
+          break;
+        }
+      }
+    }
+
+    if (converged) {
+      earlyStoppedRef.current = true;
     }
 
     flushState();
 
-    if (episodeRef.current < maxEpisodes) {
-      timerRef.current = setTimeout(runBatch, UI_UPDATE_INTERVAL_MS);
-    } else {
+    if (converged || episodeRef.current >= maxEpisodes) {
       isRunningRef.current = false;
       setState(prev => ({ ...prev, isRunning: false }));
+    } else {
+      timerRef.current = setTimeout(runBatch, UI_UPDATE_INTERVAL_MS);
     }
   }, [flushState]);
 
@@ -125,6 +163,9 @@ export function useRlTraining() {
     agentRef.current?.reset();
     episodeRef.current = 0;
     historyRef.current = [];
+    bestRollingAvgRef.current = -Infinity;
+    noImprovementCountRef.current = 0;
+    earlyStoppedRef.current = false;
     setState(prev => ({
       ...prev,
       isRunning: false,
@@ -132,6 +173,8 @@ export function useRlTraining() {
       history: [],
       explorationRate: agentRef.current?.epsilon ?? 1.0,
       agent: agentRef.current,
+      earlyStopped: false,
+      earlyStoppedAt: null,
     }));
   }, []);
 
