@@ -8,11 +8,67 @@
     background-color: var(--color-light);
     color: var(--color-dark);
     font-family: Inter, system-ui, -apple-system, sans-serif;
+    transition: background-color 0.2s, color 0.2s;
   }
 
   #root {
     min-height: 100vh;
   }
+}
+
+/* Dark theme overrides */
+.dark {
+  --color-light: #141414;
+  --color-dark: #E5E5E5;
+  --color-base-white: #1C1C1C;
+  --color-base-black: #F5F5F5;
+  --color-strong: #F5F5F5;
+  --color-subtle: #333333;
+  --color-gray: #252525;
+  --color-secondary: #999999;
+  --color-interactive: #618EFF;
+  --color-primary: #618EFF;
+
+  --color-neutral-100: #1C1C1C;
+  --color-neutral-200: #252525;
+  --color-neutral-300: #333333;
+  --color-neutral-400: #666666;
+  --color-neutral-500: #888888;
+  --color-neutral-600: #AAAAAA;
+  --color-neutral-700: #CCCCCC;
+  --color-neutral-800: #E5E5E5;
+  --color-neutral-900: #F5F5F5;
+
+  --color-info-subtle: #1A2744;
+  --color-error-subtle: #3D1A1A;
+  --color-success-subtle: #0F2920;
+  --color-warning-subtle: #2D2410;
+
+  --color-blue-100: #1A2744;
+  --color-blue-200: #1E3460;
+  --color-green-100: #0F2920;
+  --color-yellow-100: #2D2410;
+}
+
+/* Recharts dark mode */
+.dark .recharts-text,
+.dark .recharts-cartesian-axis-tick-value,
+.dark .recharts-label {
+  fill: var(--color-secondary) !important;
+}
+
+.dark .recharts-default-tooltip {
+  background-color: var(--color-base-white) !important;
+  border-color: var(--color-subtle) !important;
+  color: var(--color-dark) !important;
+}
+
+.dark .recharts-tooltip-label {
+  color: var(--color-dark) !important;
+}
+
+.dark .recharts-tooltip-item {
+  color: var(--color-dark) !important;
 }
 
 /* Custom slider styling */
