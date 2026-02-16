@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import {
-  Typography, Tabs, TabsList, TabsTrigger, TabsContent, TooltipProvider,
+  Typography, Tabs, TabsList, TabsTrigger, TabsContent, TooltipProvider, Badge,
 } from '@northslopetech/altitude-ui';
 import { CsvDataContext, useCsvDataProvider } from './hooks/useCsvData';
 import { DataExplorer } from './pages/DataExplorer';
@@ -16,22 +16,41 @@ function App() {
   return (
     <TooltipProvider>
       <CsvDataContext.Provider value={csvData}>
-        <div className="min-h-screen" style={{ background: 'var(--color-light)' }}>
+        <div
+          className="min-h-screen"
+          style={{ backgroundColor: 'var(--color-light)', color: 'var(--color-dark)' }}
+        >
           {/* Header */}
-          <header className="border-b px-6 py-4" style={{ borderColor: 'var(--color-gray)' }}>
-            <div className="flex items-center gap-3">
+          <header
+            style={{
+              borderBottom: '1px solid var(--color-subtle)',
+              padding: '20px 32px',
+              backgroundColor: 'var(--color-base-white)',
+            }}
+          >
+            <div className="flex items-center" style={{ gap: '12px' }}>
               <Typography variant="heading-lg" as="h1">
                 RL Dynamic Pricing Demo
               </Typography>
-              <Typography variant="body-sm" style={{ color: 'var(--color-secondary)' }}>
-                NorthSlope Technologies
-              </Typography>
+              <Badge variant="neutral" style={{ marginLeft: '4px' }}>Interactive</Badge>
             </div>
+            <Typography
+              variant="body-sm"
+              style={{ color: 'var(--color-secondary)', marginTop: '4px' }}
+            >
+              NorthSlope Technologies — Powered by Q-Learning
+            </Typography>
           </header>
 
           {/* Tabs */}
           <Tabs value={activeTab} onValueChange={setActiveTab}>
-            <div className="border-b px-6" style={{ borderColor: 'var(--color-gray)' }}>
+            <div
+              style={{
+                borderBottom: '1px solid var(--color-subtle)',
+                padding: '0 32px',
+                backgroundColor: 'var(--color-base-white)',
+              }}
+            >
               <TabsList>
                 <TabsTrigger value="data">Data Explorer</TabsTrigger>
                 <TabsTrigger value="training">RL Training</TabsTrigger>
@@ -41,7 +60,7 @@ function App() {
               </TabsList>
             </div>
 
-            <main className="max-w-7xl mx-auto">
+            <main style={{ maxWidth: '1280px', margin: '0 auto', padding: '0 32px' }}>
               <TabsContent value="data">
                 <DataExplorer />
               </TabsContent>

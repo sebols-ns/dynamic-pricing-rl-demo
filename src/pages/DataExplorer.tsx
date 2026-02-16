@@ -1,6 +1,7 @@
 import { useCallback, useMemo, useState } from 'react';
 import {
   Typography, Button, BarChart, LineChart, Table, Badge,
+  CHART_COLORS, getSeriesColor,
 } from '@northslopetech/altitude-ui';
 import {
   useReactTable,
@@ -51,7 +52,7 @@ export function DataExplorer() {
     getCoreRowModel: getCoreRowModel(),
     getSortedRowModel: getSortedRowModel(),
     getPaginationRowModel: getPaginationRowModel(),
-    initialState: { pagination: { pageSize: 15 } },
+    initialState: { pagination: { pageSize: 10 } },
   });
 
   const handleDrop = useCallback((e: React.DragEvent) => {
@@ -66,12 +67,11 @@ export function DataExplorer() {
     if (files?.[0]) loadFromFile(files[0]);
   }, [loadFromFile]);
 
-  // Chart data
   const priceDistribution = useMemo(() => {
     if (!isLoaded) return [];
     const buckets: Record<string, number> = {};
     for (const row of rows) {
-      const bucket = `$${(Math.floor(row.unit_price / 10) * 10).toFixed(0)}`;
+      const bucket = `$${(Math.floor(row.unit_price / 20) * 20).toFixed(0)}`;
       buckets[bucket] = (buckets[bucket] || 0) + 1;
     }
     return Object.entries(buckets)
@@ -105,29 +105,42 @@ export function DataExplorer() {
 
   if (!isLoaded) {
     return (
-      <div className="p-6 space-y-6">
-        <Typography variant="heading-lg">Data Explorer</Typography>
-        <Typography variant="body-md" style={{ color: 'var(--color-secondary)' }}>
+      <div style={{ padding: '32px 0' }}>
+        <Typography variant="heading-lg" style={{ marginBottom: '8px' }}>Data Explorer</Typography>
+        <Typography variant="body-md" style={{ color: 'var(--color-secondary)', marginBottom: '32px' }}>
           Upload a CSV file or load the sample Kaggle Retail Price Optimization dataset to begin.
         </Typography>
 
         {error && (
-          <div className="p-3 rounded" style={{ background: 'var(--color-error)', color: 'var(--color-light)' }}>
-            <Typography variant="body-sm">{error}</Typography>
+          <div style={{
+            padding: '12px 16px',
+            borderRadius: '8px',
+            backgroundColor: 'var(--color-error-subtle)',
+            border: '1px solid var(--color-error)',
+            marginBottom: '24px',
+          }}>
+            <Typography variant="body-sm" style={{ color: 'var(--color-error)' }}>{error}</Typography>
           </div>
         )}
 
         <div
-          className="border-2 border-dashed rounded-lg p-12 text-center cursor-pointer"
-          style={{ borderColor: 'var(--color-gray)' }}
+          style={{
+            border: '2px dashed var(--color-subtle)',
+            borderRadius: '8px',
+            padding: '48px 32px',
+            textAlign: 'center',
+            backgroundColor: 'var(--color-gray)',
+          }}
           onDragOver={e => e.preventDefault()}
           onDrop={handleDrop}
         >
-          <Typography variant="heading-sm" className="mb-2">Drag & Drop CSV Here</Typography>
-          <Typography variant="body-sm" style={{ color: 'var(--color-secondary)' }} className="mb-4">
+          <Typography variant="heading-sm" style={{ marginBottom: '8px' }}>
+            Drag & Drop CSV Here
+          </Typography>
+          <Typography variant="body-sm" style={{ color: 'var(--color-secondary)', marginBottom: '24px' }}>
             or use the buttons below
           </Typography>
-          <div className="flex gap-3 justify-center">
+          <div className="flex justify-center" style={{ gap: '12px' }}>
             <Button onClick={loadSampleData} disabled={isLoading}>
               {isLoading ? 'Loading...' : 'Load Sample Data'}
             </Button>
@@ -148,14 +161,21 @@ export function DataExplorer() {
   }
 
   return (
-    <div className="p-6 space-y-6">
-      <div className="flex items-center justify-between">
+    <div style={{ padding: '32px 0' }}>
+      <div className="flex items-center justify-between" style={{ marginBottom: '24px' }}>
         <Typography variant="heading-lg">Data Explorer</Typography>
         <Badge variant="success">{rows.length.toLocaleString()} rows loaded</Badge>
       </div>
 
       {/* KPI Cards */}
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+      <div
+        style={{
+          display: 'grid',
+          gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))',
+          gap: '16px',
+          marginBottom: '32px',
+        }}
+      >
         <MetricCard label="Total Rows" value={rows.length.toLocaleString()} />
         <MetricCard label="Products" value={products.length} />
         <MetricCard label="Categories" value={categories.length} />
@@ -163,7 +183,14 @@ export function DataExplorer() {
       </div>
 
       {/* Charts */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+      <div
+        style={{
+          display: 'grid',
+          gridTemplateColumns: 'repeat(auto-fit, minmax(400px, 1fr))',
+          gap: '24px',
+          marginBottom: '32px',
+        }}
+      >
         {priceDistribution.length > 0 && (
           <BarChart
             data={priceDistribution}
@@ -172,6 +199,7 @@ export function DataExplorer() {
             title="Price Distribution"
             xAxisLabel="Price Range"
             yAxisLabel="Count"
+            barColor={CHART_COLORS.PRIMARY}
             rotateXAxisLabels
           />
         )}
@@ -179,7 +207,7 @@ export function DataExplorer() {
           <LineChart
             data={priceTrends}
             xAxisKey="date"
-            series={[{ dataKey: 'avgPrice', color: 'var(--color-interactive)' }]}
+            series={[{ dataKey: 'avgPrice', color: getSeriesColor(0), strokeWidth: 2 }]}
             title="Average Price Over Time"
             xAxisLabel="Date"
             yAxisLabel="Avg Price ($)"
@@ -189,7 +217,7 @@ export function DataExplorer() {
 
       {/* Data Table */}
       <div>
-        <Typography variant="heading-sm" className="mb-3">Raw Data</Typography>
+        <Typography variant="heading-sm" style={{ marginBottom: '16px' }}>Raw Data</Typography>
         <Table table={table} showPagination />
       </div>
     </div>

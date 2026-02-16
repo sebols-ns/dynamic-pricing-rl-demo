@@ -1,13 +1,36 @@
-@import "tailwindcss";
 @import "../node_modules/@northslopetech/altitude-ui/dist/tokens.css";
+@import "tailwindcss";
+@source "../node_modules/@northslopetech/altitude-ui/dist";
 
-body {
-  margin: 0;
-  background: var(--color-light);
-  color: var(--color-dark);
-  font-family: var(--font-family-body, system-ui, -apple-system, sans-serif);
+@layer base {
+  body {
+    margin: 0;
+    background-color: var(--color-light);
+    color: var(--color-dark);
+    font-family: Inter, system-ui, -apple-system, sans-serif;
+  }
+
+  #root {
+    min-height: 100vh;
+  }
 }
 
-#root {
-  min-height: 100vh;
+/* Custom slider styling */
+input[type="range"] {
+  -webkit-appearance: none;
+  appearance: none;
+  height: 6px;
+  border-radius: 3px;
+  background: var(--color-neutral-300);
+  outline: none;
+}
+
+input[type="range"]::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  background: var(--color-interactive);
+  cursor: pointer;
 }
