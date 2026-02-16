@@ -1,10 +1,14 @@
 import { useState, useEffect, useMemo } from 'react';
 import {
-  Typography, Button, Badge, LineChart,
+  Typography, Button, Badge,
   Select, SelectTrigger, SelectValue, SelectContent, SelectItem,
   Tooltip, TooltipTrigger, TooltipContent, TooltipProvider,
   CHART_COLORS, getSeriesColor,
 } from '@northslopetech/altitude-ui';
+import {
+  ResponsiveContainer, LineChart as RechartsLineChart, Line,
+  XAxis, YAxis, Tooltip as RechartsTooltip, CartesianGrid,
+} from 'recharts';
 import { useCsvData } from '../hooks/useCsvData';
 import type { useRlTraining } from '../hooks/useRlTraining';
 import { useTrainedAgent } from '../hooks/useTrainedAgent';
@@ -102,8 +106,8 @@ export function RlTraining({ training }: RlTrainingProps) {
       };
     });
 
-    // Downsample to ~80 points max
-    const maxPoints = 80;
+    // Downsample to ~20 points max (Altitude UI renders every tick label)
+    const maxPoints = 20;
     if (full.length <= maxPoints) return full.map(p => ({ ...p, episode: Math.round(p.episode) }));
     const step = full.length / maxPoints;
     const sampled = [];
@@ -271,32 +275,49 @@ export function RlTraining({ training }: RlTrainingProps) {
         }}
       >
         {chartData.length > 0 && (
-          <LineChart
-            data={chartData}
-            xAxisKey="episode"
-            series={[
-              { dataKey: 'smoothReward', color: getSeriesColor(0), strokeWidth: 2, dot: false },
-              { dataKey: 'reward', color: 'var(--color-neutral-400)', strokeWidth: 1, dot: false },
-            ]}
-            title="Reward per Episode"
-            xAxisLabel="Episode"
-            yAxisLabel="Avg Reward"
-            showLegend
-            legendItems={[
-              { key: 'smoothed', label: 'Smoothed', color: getSeriesColor(0) },
-              { key: 'raw', label: 'Raw', color: 'var(--color-neutral-400)' },
-            ]}
-          />
+          <div className="border border-subtle bg-light mx-0" style={{ borderRadius: '8px', overflow: 'hidden' }}>
+            <div className="flex items-center justify-between px-3 py-2 border-b border-subtle">
+              <Typography variant="label-sm-bold">Reward per Episode</Typography>
+              <div className="flex items-center" style={{ gap: '12px', fontSize: '12px' }}>
+                <span style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+                  <span style={{ width: 12, height: 3, backgroundColor: getSeriesColor(0), display: 'inline-block', borderRadius: 1 }} /> Smoothed
+                </span>
+                <span style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+                  <span style={{ width: 12, height: 3, backgroundColor: 'var(--color-neutral-400)', display: 'inline-block', borderRadius: 1 }} /> Raw
+                </span>
+              </div>
+            </div>
+            <div style={{ padding: '8px 8px 0' }}>
+              <ResponsiveContainer width="100%" height={280}>
+                <RechartsLineChart data={chartData} margin={{ top: 8, right: 16, left: 8, bottom: 24 }}>
+                  <CartesianGrid strokeDasharray="3 3" stroke="var(--color-neutral-200)" />
+                  <XAxis dataKey="episode" tick={{ fontSize: 11 }} label={{ value: 'Episode', position: 'insideBottom', offset: -12, fontSize: 12 }} />
+                  <YAxis domain={['auto', 'auto']} tick={{ fontSize: 11 }} label={{ value: 'Avg Reward', angle: -90, position: 'insideLeft', offset: 4, fontSize: 12 }} />
+                  <RechartsTooltip />
+                  <Line type="monotone" dataKey="smoothReward" stroke={getSeriesColor(0)} strokeWidth={2} dot={false} activeDot={false} />
+                  <Line type="monotone" dataKey="reward" stroke="var(--color-neutral-400)" strokeWidth={1} dot={false} activeDot={false} />
+                </RechartsLineChart>
+              </ResponsiveContainer>
+            </div>
+          </div>
         )}
         {chartData.length > 0 && (
-          <LineChart
-            data={chartData}
-            xAxisKey="episode"
-            series={[{ dataKey: 'epsilon', color: CHART_COLORS.WARNING, strokeWidth: 2, dot: false }]}
-            title="Epsilon Decay"
-            xAxisLabel="Episode"
-            yAxisLabel="Epsilon"
-          />
+          <div className="border border-subtle bg-light mx-0" style={{ borderRadius: '8px', overflow: 'hidden' }}>
+            <div className="flex items-center justify-between px-3 py-2 border-b border-subtle">
+              <Typography variant="label-sm-bold">Epsilon Decay</Typography>
+            </div>
+            <div style={{ padding: '8px 8px 0' }}>
+              <ResponsiveContainer width="100%" height={280}>
+                <RechartsLineChart data={chartData} margin={{ top: 8, right: 16, left: 8, bottom: 24 }}>
+                  <CartesianGrid strokeDasharray="3 3" stroke="var(--color-neutral-200)" />
+                  <XAxis dataKey="episode" tick={{ fontSize: 11 }} label={{ value: 'Episode', position: 'insideBottom', offset: -12, fontSize: 12 }} />
+                  <YAxis domain={['auto', 'auto']} tick={{ fontSize: 11 }} label={{ value: 'Epsilon', angle: -90, position: 'insideLeft', offset: 4, fontSize: 12 }} />
+                  <RechartsTooltip />
+                  <Line type="monotone" dataKey="epsilon" stroke={CHART_COLORS.WARNING} strokeWidth={2} dot={false} activeDot={false} />
+                </RechartsLineChart>
+              </ResponsiveContainer>
+            </div>
+          </div>
         )}
       </div>
 
