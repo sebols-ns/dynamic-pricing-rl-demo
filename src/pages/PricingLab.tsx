@@ -1,13 +1,11 @@
-import { useState, useMemo, useEffect } from 'react';
+import { useState, useMemo } from 'react';
 import {
   Typography, Badge, BarChart,
-  Select, SelectTrigger, SelectValue, SelectContent, SelectItem,
   CHART_COLORS,
 } from '@northslopetech/altitude-ui';
 import { useCsvData } from '../hooks/useCsvData';
+import { useTrainedAgent } from '../hooks/useTrainedAgent';
 import { MetricCard } from '../components/MetricCard';
-import { PricingEnvironment } from '../engine/environment';
-import { QLearningAgent } from '../engine/q-learning';
 import type { RewardWeights, State } from '../types/rl';
 import { ACTION_MULTIPLIERS, NUM_ACTIONS } from '../types/rl';
 
@@ -19,45 +17,21 @@ const cardStyle: React.CSSProperties = {
 };
 
 export function PricingLab() {
-  const { rows, products, isLoaded } = useCsvData();
-  const [selectedProduct, setSelectedProduct] = useState<string>('');
+  const { isLoaded } = useCsvData();
+  const { agent, env, isTrained, productId, episode } = useTrainedAgent();
   const [demand, setDemand] = useState(1.0);
-  const [competitorPrice, setCompetitorPrice] = useState(2);
+  const [competitorPrice, setCompetitorPrice] = useState(1);
   const [season, setSeason] = useState(2);
   const [weights, setWeights] = useState<RewardWeights>({ revenue: 0.4, margin: 0.4, volume: 0.2 });
-  const [agent, setAgent] = useState<QLearningAgent | null>(null);
-  const [env, setEnv] = useState<PricingEnvironment | null>(null);
-  const [isTrained, setIsTrained] = useState(false);
-
-  useEffect(() => {
-    if (isLoaded && products.length > 0 && !selectedProduct) {
-      setSelectedProduct(products[0].id);
-    }
-  }, [isLoaded, products, selectedProduct]);
-
-  useEffect(() => {
-    if (!selectedProduct || !isLoaded) return;
-    const productRows = rows.filter(r => r.product_id === selectedProduct);
-    if (productRows.length === 0) return;
-
-    const newEnv = new PricingEnvironment({ productRows, weights });
-    const newAgent = new QLearningAgent({ episodes: 300 });
-    for (let ep = 0; ep < 300; ep++) {
-      newAgent.runEpisode(newEnv);
-    }
-    setEnv(newEnv);
-    setAgent(newAgent);
-    setIsTrained(true);
-  }, [selectedProduct, isLoaded, rows, weights]);
 
   const results = useMemo(() => {
     if (!agent || !env || !isTrained) return null;
 
     const state: State = {
-      demandBin: Math.min(4, Math.max(0, Math.round(demand * 2))),
+      demandBin: Math.min(2, Math.max(0, Math.round(demand))),
       competitorPriceBin: competitorPrice,
       seasonBin: season,
-      lagPriceBin: 2,
+      lagPriceBin: 1,
     };
 
     const stateIndex = env.stateToIndex(state);
@@ -105,35 +79,42 @@ export function PricingLab() {
     );
   }
 
+  if (!isTrained) {
+    return (
+      <div style={{ padding: '32px 0' }}>
+        <Typography variant="heading-lg">Pricing Lab</Typography>
+        <div style={{
+          ...cardStyle,
+          marginTop: '24px',
+          textAlign: 'center',
+          padding: '48px 32px',
+        }}>
+          <Typography variant="heading-sm" style={{ marginBottom: '8px' }}>
+            No Trained Model Available
+          </Typography>
+          <Typography variant="body-md" style={{ color: 'var(--color-secondary)', marginBottom: '16px' }}>
+            Please train an RL agent in the RL Training tab first. The trained model will automatically be available here for what-if analysis.
+          </Typography>
+          <Badge variant="warning">Go to RL Training tab to train a model</Badge>
+        </div>
+      </div>
+    );
+  }
+
   const seasonLabels = ['Winter', 'Spring', 'Summer', 'Fall'];
-  const compLabels = ['Much Lower', 'Lower', 'Similar', 'Higher', 'Much Higher'];
+  const compLabels = ['Lower', 'Similar', 'Higher'];
 
   return (
     <div style={{ padding: '32px 0' }}>
       <div className="flex items-center justify-between" style={{ marginBottom: '8px' }}>
         <Typography variant="heading-lg">Pricing Lab</Typography>
-        {isTrained && <Badge variant="success">Agent Trained (300 episodes)</Badge>}
+        <div className="flex items-center" style={{ gap: '8px' }}>
+          <Badge variant="success">Trained on {productId} ({episode} episodes)</Badge>
+        </div>
       </div>
       <Typography variant="body-md" style={{ color: 'var(--color-secondary)', marginBottom: '24px' }}>
         Adjust market conditions and objective weights to see how the RL agent adapts its pricing recommendation.
       </Typography>
-
-      {/* Product selector */}
-      <div style={{ width: '240px', marginBottom: '24px' }}>
-        <Typography variant="label-sm-bold" style={{ marginBottom: '6px' }}>Product</Typography>
-        <Select value={selectedProduct} onValueChange={setSelectedProduct}>
-          <SelectTrigger width="fill">
-            <SelectValue placeholder="Select product" />
-          </SelectTrigger>
-          <SelectContent>
-            {products.slice(0, 20).map(p => (
-              <SelectItem key={p.id} value={p.id}>
-                {p.id} ({p.category})
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
-      </div>
 
       <div
         style={{
@@ -165,7 +146,7 @@ export function PricingLab() {
               <Typography variant="label-sm-bold">Competitor Price</Typography>
               <Typography variant="label-sm" style={{ color: 'var(--color-interactive)' }}>{compLabels[competitorPrice]}</Typography>
             </div>
-            <input type="range" min={0} max={4} step={1} value={competitorPrice}
+            <input type="range" min={0} max={2} step={1} value={competitorPrice}
               onChange={e => setCompetitorPrice(Number(e.target.value))} style={{ width: '100%' }} />
           </div>
 

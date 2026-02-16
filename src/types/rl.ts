@@ -8,11 +8,11 @@ export interface State {
 export const ACTION_MULTIPLIERS = [0.70, 0.80, 0.85, 0.90, 0.95, 1.00, 1.05, 1.10, 1.15, 1.20] as const;
 export const NUM_ACTIONS = ACTION_MULTIPLIERS.length;
 
-export const DEMAND_BINS = 5;
-export const COMPETITOR_BINS = 5;
+export const DEMAND_BINS = 3;
+export const COMPETITOR_BINS = 3;
 export const SEASON_BINS = 4;
-export const LAG_PRICE_BINS = 5;
-export const TOTAL_STATES = DEMAND_BINS * COMPETITOR_BINS * SEASON_BINS * LAG_PRICE_BINS; // 500
+export const LAG_PRICE_BINS = 3;
+export const TOTAL_STATES = DEMAND_BINS * COMPETITOR_BINS * SEASON_BINS * LAG_PRICE_BINS; // 108
 
 export interface TrainingConfig {
   learningRate: number;
@@ -31,7 +31,7 @@ export const DEFAULT_CONFIG: TrainingConfig = {
   epsilonStart: 1.0,
   epsilonEnd: 0.01,
   epsilonDecay: 0.998,
-  episodes: 3000,
+  episodes: 1500,
   earlyStopPatience: 100,
   earlyStopThreshold: 0.005,
 };

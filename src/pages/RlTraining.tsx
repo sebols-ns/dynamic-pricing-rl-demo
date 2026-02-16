@@ -161,9 +161,9 @@ export function RlTraining({ training }: RlTrainingProps) {
           <RlTerm term="Epsilon" definition="The probability of choosing a random action. Starts high (explore) and decays toward zero (exploit).">e-greedy</RlTerm> policy.
         </Typography>
         <div className="flex" style={{ gap: '8px', marginTop: '12px' }}>
-          <Badge variant="neutral">500 states</Badge>
+          <Badge variant="neutral">108 states</Badge>
           <Badge variant="neutral">10 actions</Badge>
-          <Badge variant="neutral">5,000 Q-values</Badge>
+          <Badge variant="neutral">1,080 Q-values</Badge>
         </div>
       </div>
 

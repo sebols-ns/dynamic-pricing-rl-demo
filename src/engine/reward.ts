@@ -21,7 +21,9 @@ export function computeReward(
 ): number {
   const normRevenue = normalize(inputs.revenue, revenueRange.min, revenueRange.max);
   const normMargin = normalize(inputs.margin, marginRange.min, marginRange.max);
-  const normVolume = normalize(inputs.volume, volumeRange.min, volumeRange.max);
+  // Cap volume at 1.0 (baseline) — penalize losing volume but don't reward gaining it
+  // This prevents the agent from always discounting to chase volume
+  const normVolume = Math.min(1.0, normalize(inputs.volume, volumeRange.min, volumeRange.max));
 
   return (
     weights.revenue * normRevenue +

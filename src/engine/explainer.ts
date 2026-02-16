@@ -8,10 +8,10 @@ const FEATURES = ['demandBin', 'competitorPriceBin', 'seasonBin', 'lagPriceBin']
 const NUM_FEATURES = FEATURES.length;
 
 const FEATURE_LABELS: Record<string, string[]> = {
-  demandBin: ['Very Low Demand', 'Low Demand', 'Medium Demand', 'High Demand', 'Very High Demand'],
-  competitorPriceBin: ['Much Lower Comp.', 'Lower Comp.', 'Similar Comp.', 'Higher Comp.', 'Much Higher Comp.'],
+  demandBin: ['Low Demand', 'Medium Demand', 'High Demand'],
+  competitorPriceBin: ['Lower Comp.', 'Similar Comp.', 'Higher Comp.'],
   seasonBin: ['Winter', 'Spring', 'Summer', 'Fall'],
-  lagPriceBin: ['Very Low Hist.', 'Low Hist.', 'Medium Hist.', 'High Hist.', 'Very High Hist.'],
+  lagPriceBin: ['Low Hist.', 'Medium Hist.', 'High Hist.'],
 };
 
 function getBaselineState(): State {
