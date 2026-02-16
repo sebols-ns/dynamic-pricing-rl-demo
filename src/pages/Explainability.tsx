@@ -128,7 +128,6 @@ export function Explainability() {
   const sorted = shapResult
     ? [...shapResult.shapValues].sort((a, b) => Math.abs(b.value) - Math.abs(a.value))
     : [];
-  const maxAbsShap = sorted.length > 0 ? Math.abs(sorted[0].value) : 1;
 
   return (
     <div style={{ padding: '32px 0' }}>
@@ -218,8 +217,8 @@ export function Explainability() {
               style={{
                 marginTop: '8px',
                 color: shapResult.finalPrice >= shapResult.basePrice
-                  ? 'var(--color-success)'
-                  : 'var(--color-error)',
+                  ? '#3b82f6'
+                  : '#ef4444',
               }}
             >
               {shapResult.finalPrice >= shapResult.basePrice ? '+' : ''}
@@ -230,101 +229,220 @@ export function Explainability() {
         )}
       </div>
 
-      {/* Feature Contributions — horizontal bar chart */}
-      {shapResult && (
-        <div style={{ ...cardStyle, marginBottom: '24px' }}>
-          <Typography variant="label-md-bold" style={{ marginBottom: '20px' }}>
-            Feature Contributions (Shapley Values)
-          </Typography>
+      {/* Waterfall Chart */}
+      {shapResult && (() => {
+        // Build waterfall steps: baseline → contributions → final
+        const steps: { label: string; delta: number; runningTotal: number; type: 'anchor' | 'pos' | 'neg' }[] = [];
+        let running = shapResult.basePrice;
+        steps.push({ label: 'Baseline', delta: 0, runningTotal: running, type: 'anchor' });
+        for (const sv of sorted) {
+          running += sv.value;
+          steps.push({ label: sv.label, delta: sv.value, runningTotal: running, type: sv.value >= 0 ? 'pos' : 'neg' });
+        }
+        steps.push({ label: 'Final Price', delta: 0, runningTotal: shapResult.finalPrice, type: 'anchor' });
 
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
-            {sorted.map(sv => {
-              const pct = maxAbsShap > 0 ? (Math.abs(sv.value) / maxAbsShap) * 100 : 0;
-              const isPositive = sv.value >= 0;
-              return (
-                <div key={sv.feature} style={{ display: 'grid', gridTemplateColumns: '140px 1fr 70px', alignItems: 'center', gap: '12px' }}>
-                  <Typography variant="label-sm" style={{ textAlign: 'right', color: 'var(--color-dark)' }}>
-                    {sv.label}
-                  </Typography>
+        // Layout constants
+        const labelWidth = 120;
+        const valueWidth = 80;
+        const chartLeftPad = 8;
+        const barAreaWidth = 500;
+        const totalWidth = labelWidth + chartLeftPad + barAreaWidth + valueWidth;
+        const rowHeight = 44;
+        const barHeight = 28;
+        const svgHeight = steps.length * rowHeight + 12;
 
-                  <div style={{ position: 'relative', height: '24px' }}>
-                    {/* Center line */}
-                    <div style={{
-                      position: 'absolute',
-                      left: '50%',
-                      top: 0,
-                      bottom: 0,
-                      width: '1px',
-                      backgroundColor: 'var(--color-neutral-300)',
-                    }} />
+        // Scale: map price values to x positions in the bar area
+        const allPrices = steps.map(s => s.runningTotal);
+        const pMin = Math.min(...allPrices);
+        const pMax = Math.max(...allPrices);
+        const pPad = Math.max(1, (pMax - pMin) * 0.2);
+        const scaleMin = pMin - pPad;
+        const scaleMax = pMax + pPad;
+        const xScale = (price: number) =>
+          labelWidth + chartLeftPad + ((price - scaleMin) / (scaleMax - scaleMin)) * barAreaWidth;
+
+        const BLUE = '#3b82f6';
+        const RED = '#ef4444';
+        const GREY = '#94a3b8';
+
+        return (
+          <div style={{ ...cardStyle, marginBottom: '24px' }}>
+            <Typography variant="label-md-bold" style={{ marginBottom: '16px' }}>
+              Price Waterfall (Shapley Values)
+            </Typography>
+
+            <svg width="100%" viewBox={`0 0 ${totalWidth} ${svgHeight}`} style={{ overflow: 'visible', maxWidth: totalWidth }}>
+              {steps.map((step, i) => {
+                const y = i * rowHeight + 6;
+                const barY = y + (rowHeight - barHeight) / 2;
+
+                if (step.type === 'anchor') {
+                  // Anchor block: grey outlined bar from 0-width marker at price
+                  const x = xScale(step.runningTotal);
+                  const anchorW = 6;
+                  return (
+                    <g key={i}>
+                      {/* Connector from previous step */}
+                      {i > 0 && (
+                        <line
+                          x1={xScale(steps[i - 1].runningTotal)}
+                          y1={barY - 2}
+                          x2={xScale(steps[i - 1].runningTotal)}
+                          y2={barY + barHeight / 2}
+                          stroke={GREY}
+                          strokeWidth={1.5}
+                          strokeDasharray="4,3"
+                        />
+                      )}
+                      {/* Label */}
+                      <text
+                        x={labelWidth - 4}
+                        y={barY + barHeight / 2}
+                        textAnchor="end"
+                        fontSize={12}
+                        fontWeight={700}
+                        fill="var(--color-dark)"
+                        dominantBaseline="middle"
+                      >
+                        {step.label}
+                      </text>
+                      {/* Anchor bar */}
+                      <rect
+                        x={x - anchorW / 2}
+                        y={barY}
+                        width={anchorW}
+                        height={barHeight}
+                        rx={3}
+                        fill={GREY}
+                        opacity={0.5}
+                      />
+                      <rect
+                        x={x - anchorW / 2}
+                        y={barY}
+                        width={anchorW}
+                        height={barHeight}
+                        rx={3}
+                        fill="none"
+                        stroke={GREY}
+                        strokeWidth={1.5}
+                      />
+                      {/* Price label */}
+                      <text
+                        x={x + anchorW / 2 + 8}
+                        y={barY + barHeight / 2}
+                        fontSize={12}
+                        fontWeight={700}
+                        fill="var(--color-dark)"
+                        dominantBaseline="middle"
+                      >
+                        ${step.runningTotal.toFixed(2)}
+                      </text>
+                    </g>
+                  );
+                }
+
+                // Contribution block
+                const prevTotal = steps[i - 1].runningTotal;
+                const barLeft = xScale(Math.min(prevTotal, step.runningTotal));
+                const barRight = xScale(Math.max(prevTotal, step.runningTotal));
+                const barW = Math.max(3, barRight - barLeft);
+                const color = step.type === 'pos' ? BLUE : RED;
+
+                return (
+                  <g key={i}>
+                    {/* Connector line from previous step's end */}
+                    <line
+                      x1={xScale(prevTotal)}
+                      y1={barY - 2}
+                      x2={xScale(prevTotal)}
+                      y2={barY + barHeight / 2}
+                      stroke={GREY}
+                      strokeWidth={1.5}
+                      strokeDasharray="4,3"
+                    />
+                    {/* Label */}
+                    <text
+                      x={labelWidth - 4}
+                      y={barY + barHeight / 2}
+                      textAnchor="end"
+                      fontSize={11}
+                      fill="var(--color-dark)"
+                      dominantBaseline="middle"
+                    >
+                      {step.label}
+                    </text>
                     {/* Bar */}
-                    <div style={{
-                      position: 'absolute',
-                      top: '2px',
-                      height: '20px',
-                      borderRadius: '4px',
-                      backgroundColor: isPositive ? 'var(--color-success)' : 'var(--color-error)',
-                      opacity: 0.8,
-                      ...(isPositive
-                        ? { left: '50%', width: `${pct / 2}%` }
-                        : { right: '50%', width: `${pct / 2}%` }
-                      ),
-                      transition: 'width 0.2s ease, left 0.2s ease, right 0.2s ease',
-                    }} />
-                  </div>
+                    <rect
+                      x={barLeft}
+                      y={barY}
+                      width={barW}
+                      height={barHeight}
+                      rx={4}
+                      fill={color}
+                      opacity={0.75}
+                    />
+                    {/* Delta label inside or beside bar */}
+                    <text
+                      x={step.type === 'pos' ? barRight + 6 : barLeft - 6}
+                      y={barY + barHeight / 2}
+                      textAnchor={step.type === 'pos' ? 'start' : 'end'}
+                      fontSize={11}
+                      fontWeight={600}
+                      fill={color}
+                      dominantBaseline="middle"
+                    >
+                      {step.delta >= 0 ? '+' : ''}{step.delta.toFixed(2)}
+                    </text>
+                    {/* Running total - right side */}
+                    <text
+                      x={labelWidth + chartLeftPad + barAreaWidth + 8}
+                      y={barY + barHeight / 2}
+                      fontSize={10}
+                      fill="var(--color-secondary)"
+                      dominantBaseline="middle"
+                      fontVariantNumeric="tabular-nums"
+                    >
+                      ${step.runningTotal.toFixed(2)}
+                    </text>
+                  </g>
+                );
+              })}
+            </svg>
 
-                  <Typography
-                    variant="label-sm-bold"
-                    style={{
-                      color: isPositive ? 'var(--color-success)' : 'var(--color-error)',
-                      fontVariantNumeric: 'tabular-nums',
-                    }}
-                  >
-                    {isPositive ? '+' : ''}{sv.value.toFixed(2)}
-                  </Typography>
-                </div>
-              );
-            })}
-          </div>
-
-          {/* Price flow summary */}
-          <div style={{
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            gap: '16px',
-            marginTop: '20px',
-            padding: '12px 0',
-            borderTop: '1px solid var(--color-subtle)',
-          }}>
-            <div style={{ textAlign: 'center' }}>
-              <Typography variant="label-sm" style={{ color: 'var(--color-secondary)' }}>Base</Typography>
-              <Typography variant="label-md-bold">${shapResult.basePrice.toFixed(2)}</Typography>
-            </div>
-            {sorted.map(sv => (
-              <div key={sv.feature} style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
-                <span style={{ color: 'var(--color-neutral-400)' }}>{'\u2192'}</span>
-                <Typography
-                  variant="label-sm"
-                  style={{
-                    color: sv.value >= 0 ? 'var(--color-success)' : 'var(--color-error)',
+            {/* Summary breadcrumb */}
+            <div style={{
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              flexWrap: 'wrap',
+              gap: '8px',
+              marginTop: '16px',
+              padding: '12px 0',
+              borderTop: '1px solid var(--color-subtle)',
+            }}>
+              <span style={{ fontSize: '12px', fontWeight: 700, color: 'var(--color-dark)' }}>
+                Base ${shapResult.basePrice.toFixed(2)}
+              </span>
+              {sorted.map(sv => (
+                <span key={sv.feature} style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+                  <span style={{ color: 'var(--color-neutral-400)', fontSize: '12px' }}>{'\u2192'}</span>
+                  <span style={{
+                    fontSize: '12px',
                     fontWeight: 600,
-                  }}
-                >
-                  {sv.value >= 0 ? '+' : ''}{sv.value.toFixed(2)}
-                </Typography>
-              </div>
-            ))}
-            <span style={{ color: 'var(--color-neutral-400)' }}>{'\u2192'}</span>
-            <div style={{ textAlign: 'center' }}>
-              <Typography variant="label-sm" style={{ color: 'var(--color-secondary)' }}>Final</Typography>
-              <Typography variant="label-md-bold" style={{ color: 'var(--color-interactive)' }}>
-                ${shapResult.finalPrice.toFixed(2)}
-              </Typography>
+                    color: sv.value >= 0 ? '#3b82f6' : '#ef4444',
+                  }}>
+                    {sv.value >= 0 ? '+' : ''}{sv.value.toFixed(2)}
+                  </span>
+                </span>
+              ))}
+              <span style={{ color: 'var(--color-neutral-400)', fontSize: '12px' }}>{'\u2192'}</span>
+              <span style={{ fontSize: '12px', fontWeight: 700, color: 'var(--color-interactive)' }}>
+                Final ${shapResult.finalPrice.toFixed(2)}
+              </span>
             </div>
           </div>
-        </div>
-      )}
+        );
+      })()}
 
       {/* Data Lineage */}
       <div style={cardStyle}>
