@@ -55,9 +55,9 @@ export class PricingEnvironment {
     const prices = this.rows.map(r => r.unit_price);
     const priceStd = Math.sqrt(prices.reduce((s, p) => s + (p - this.basePrice) ** 2, 0) / prices.length);
     const qtyMean = this.baseQty;
-    // Inelastic demand (0.3–0.6): pricing up increases revenue because volume barely drops.
+    // Inelastic demand (0.2–0.5): pricing up increases revenue because volume barely drops.
     // This gives the agent a clear gradient — higher prices yield more revenue and margin.
-    this.elasticity = priceStd > 0 ? Math.min(0.6, Math.max(0.3, qtyMean / (priceStd * 30))) : 0.5;
+    this.elasticity = priceStd > 0 ? Math.min(0.5, Math.max(0.2, qtyMean / (priceStd * 40))) : 0.35;
 
     // Precompute normalization ranges — tighter ranges give better reward gradient
     const minMult = ACTION_MULTIPLIERS[0];

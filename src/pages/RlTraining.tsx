@@ -87,7 +87,7 @@ export function RlTraining({ training }: RlTrainingProps) {
     }
   }, [training.agent, training.env, training.episode, selectedProduct]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  // Downsample chart data — show at most ~80 points for clean charts
+  // Downsample chart data — show ~60 points for smooth charts
   const chartData = useMemo(() => {
     const hist = training.history;
     if (hist.length === 0) return [];
@@ -97,17 +97,18 @@ export function RlTraining({ training }: RlTrainingProps) {
     const full = hist.map((h, i) => {
       const start = Math.max(0, i - smoothWindow + 1);
       const slice = hist.slice(start, i + 1);
-      const avg = slice.reduce((s, v) => s + v.avgReward, 0) / slice.length;
+      const rewardAvg = slice.reduce((s, v) => s + v.avgReward, 0) / slice.length;
+      const revAvg = slice.reduce((s, v) => s + v.avgRevenue, 0) / slice.length;
       return {
         episode: h.episode,
         reward: Math.round(h.avgReward * 1000) / 1000,
-        smoothReward: Math.round(avg * 1000) / 1000,
+        smoothReward: Math.round(rewardAvg * 1000) / 1000,
         epsilon: Math.round(h.epsilon * 1000) / 1000,
+        revenue: Math.round(revAvg),
       };
     });
 
-    // Downsample to ~20 points max (Altitude UI renders every tick label)
-    const maxPoints = 20;
+    const maxPoints = 60;
     if (full.length <= maxPoints) return full.map(p => ({ ...p, episode: Math.round(p.episode) }));
     const step = full.length / maxPoints;
     const sampled = [];
@@ -127,6 +128,21 @@ export function RlTraining({ training }: RlTrainingProps) {
     }
     return sampled;
   }, [training.history]);
+
+  // Compute static baseline revenue (what 1.0x pricing would yield on average)
+  const staticBaselineRevenue = useMemo(() => {
+    if (!training.env) return null;
+    const env = training.env;
+    const basePrice = env.getBasePrice();
+    const baseQty = env.getBaseQty();
+    return Math.round(basePrice * baseQty);
+  }, [training.env]);
+
+  // Add static baseline to chart data for revenue comparison
+  const revenueChartData = useMemo(() => {
+    if (!staticBaselineRevenue) return chartData;
+    return chartData.map(d => ({ ...d, staticRevenue: staticBaselineRevenue }));
+  }, [chartData, staticBaselineRevenue]);
 
   const maxEpisodes = training.agent?.getConfig().episodes ?? 500;
   const progress = Math.round((training.episode / maxEpisodes) * 100);
@@ -153,7 +169,7 @@ export function RlTraining({ training }: RlTrainingProps) {
         <Typography variant="heading-sm" style={{ marginBottom: '12px' }}>How the MDP Works</Typography>
         <Typography variant="body-sm" style={{ color: 'var(--color-secondary)' }}>
           The agent observes a <RlTerm term="State" definition="A discretized snapshot of market conditions: demand level, competitor price, season, and historical price.">state</RlTerm> (demand level, competitor price, season, lag price),
-          takes an <RlTerm term="Action" definition="One of 10 price multipliers (0.70x to 1.20x) applied to the base price.">action</RlTerm> (price multiplier),
+          takes an <RlTerm term="Action" definition="One of 12 price multipliers (0.80x to 1.60x) applied to the base price.">action</RlTerm> (price multiplier),
           and receives a <RlTerm term="Reward" definition="Weighted combination of normalized revenue, margin, and volume metrics.">reward</RlTerm> based on revenue, margin, and volume.
           Using <RlTerm term="Q-Learning" definition="A model-free RL algorithm that learns the value of state-action pairs (Q-values) to find the optimal pricing policy.">Q-learning</RlTerm>,
           it balances <RlTerm term="Exploration" definition="Trying random actions to discover potentially better pricing strategies.">exploration</RlTerm> vs{' '}
@@ -162,8 +178,47 @@ export function RlTraining({ training }: RlTrainingProps) {
         </Typography>
         <div className="flex" style={{ gap: '8px', marginTop: '12px' }}>
           <Badge variant="neutral">108 states</Badge>
-          <Badge variant="neutral">10 actions</Badge>
-          <Badge variant="neutral">1,080 Q-values</Badge>
+          <Badge variant="neutral">12 actions</Badge>
+          <Badge variant="neutral">1,296 Q-values</Badge>
+        </div>
+      </div>
+
+      {/* Data Pipeline */}
+      <div style={{ ...cardStyle, marginBottom: '24px' }}>
+        <Typography variant="heading-sm" style={{ marginBottom: '12px' }}>Data Pipeline</Typography>
+        <Typography variant="body-xs" style={{ color: 'var(--color-secondary)', marginBottom: '16px' }}>
+          How your retail data feeds into the RL pricing model. In production, a platform like Palantir Foundry
+          acts as the data integration layer — connecting live transactional, competitor, and market data into
+          the feature pipeline in real time.
+        </Typography>
+        <div style={{ display: 'flex', alignItems: 'stretch', gap: '0', overflow: 'auto' }}>
+          {[
+            { title: 'Raw Data', color: 'var(--color-blue-100)', fields: ['unit_price', 'qty', 'freight_price', 'comp_1', 'lag_price', 'month'] },
+            { title: 'Feature Extraction', color: 'var(--color-purple-100)', fields: ['Demand level', 'Competitor ratio', 'Seasonality', 'Price history'] },
+            { title: 'State Discretization', color: 'var(--color-yellow-100)', fields: ['3 demand bins', '3 competitor bins', '4 season bins', '3 lag-price bins'] },
+            { title: 'Q-Learning Agent', color: 'var(--color-green-100)', fields: ['108 states x 12 actions', 'Reward = f(rev, margin, vol)', 'Epsilon-greedy exploration'] },
+            { title: 'Pricing Decision', color: 'var(--color-success-subtle)', fields: ['Optimal multiplier', 'Per-state policy', 'Adapts to conditions'] },
+          ].map((stage, i) => (
+            <div key={stage.title} style={{ display: 'flex', alignItems: 'stretch' }}>
+              {i > 0 && (
+                <div style={{ display: 'flex', alignItems: 'center', padding: '0 6px', color: 'var(--color-secondary)', fontSize: '18px', fontWeight: 700 }}>
+                  {'\u2192'}
+                </div>
+              )}
+              <div style={{
+                backgroundColor: stage.color,
+                borderRadius: '8px',
+                padding: '12px 14px',
+                minWidth: '150px',
+                flex: '1 0 auto',
+              }}>
+                <Typography variant="label-sm-bold" style={{ marginBottom: '6px' }}>{stage.title}</Typography>
+                {stage.fields.map(f => (
+                  <Typography key={f} variant="body-xs" style={{ color: 'var(--color-secondary)', lineHeight: 1.6 }}>{f}</Typography>
+                ))}
+              </div>
+            </div>
+          ))}
         </div>
       </div>
 
@@ -262,7 +317,7 @@ export function RlTraining({ training }: RlTrainingProps) {
         <MetricCard label="Episode" value={training.episode} />
         <MetricCard label="Avg Reward" value={lastResult?.avgReward.toFixed(3) ?? '—'} />
         <MetricCard label="Epsilon" value={training.explorationRate.toFixed(4)} />
-        <MetricCard label="Total Steps" value={(training.episode * 100).toLocaleString()} />
+        <MetricCard label="Total Steps" value={(training.episode * 200).toLocaleString()} />
       </div>
 
       {/* Charts */}
@@ -291,7 +346,7 @@ export function RlTraining({ training }: RlTrainingProps) {
               <ResponsiveContainer width="100%" height={280}>
                 <RechartsLineChart data={chartData} margin={{ top: 8, right: 16, left: 8, bottom: 24 }}>
                   <CartesianGrid strokeDasharray="3 3" stroke="var(--color-neutral-200)" />
-                  <XAxis dataKey="episode" tick={{ fontSize: 11 }} label={{ value: 'Episode', position: 'insideBottom', offset: -12, fontSize: 12 }} />
+                  <XAxis dataKey="episode" tick={{ fontSize: 11 }} interval="preserveStartEnd" label={{ value: 'Episode', position: 'insideBottom', offset: -12, fontSize: 12 }} />
                   <YAxis domain={['auto', 'auto']} tick={{ fontSize: 11 }} label={{ value: 'Avg Reward', angle: -90, position: 'insideLeft', offset: 4, fontSize: 12 }} />
                   <RechartsTooltip />
                   <Line type="monotone" dataKey="smoothReward" stroke={getSeriesColor(0)} strokeWidth={2} dot={false} activeDot={false} />
@@ -301,19 +356,28 @@ export function RlTraining({ training }: RlTrainingProps) {
             </div>
           </div>
         )}
-        {chartData.length > 0 && (
+        {revenueChartData.length > 0 && (
           <div className="border border-subtle bg-light mx-0" style={{ borderRadius: '8px', overflow: 'hidden' }}>
             <div className="flex items-center justify-between px-3 py-2 border-b border-subtle">
-              <Typography variant="label-sm-bold">Epsilon Decay</Typography>
+              <Typography variant="label-sm-bold">Revenue vs Static Baseline</Typography>
+              <div className="flex items-center" style={{ gap: '12px', fontSize: '12px' }}>
+                <span style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+                  <span style={{ width: 12, height: 3, backgroundColor: CHART_COLORS.SUCCESS, display: 'inline-block', borderRadius: 1 }} /> RL Agent
+                </span>
+                <span style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+                  <span style={{ width: 12, height: 3, backgroundColor: 'var(--color-neutral-400)', display: 'inline-block', borderRadius: 1, borderTop: '1px dashed' }} /> Static (1.0x)
+                </span>
+              </div>
             </div>
             <div style={{ padding: '8px 8px 16px' }}>
               <ResponsiveContainer width="100%" height={280}>
-                <RechartsLineChart data={chartData} margin={{ top: 8, right: 16, left: 8, bottom: 24 }}>
+                <RechartsLineChart data={revenueChartData} margin={{ top: 8, right: 16, left: 16, bottom: 24 }}>
                   <CartesianGrid strokeDasharray="3 3" stroke="var(--color-neutral-200)" />
-                  <XAxis dataKey="episode" tick={{ fontSize: 11 }} label={{ value: 'Episode', position: 'insideBottom', offset: -12, fontSize: 12 }} />
-                  <YAxis domain={['auto', 'auto']} tick={{ fontSize: 11 }} label={{ value: 'Epsilon', angle: -90, position: 'insideLeft', offset: 4, fontSize: 12 }} />
-                  <RechartsTooltip />
-                  <Line type="monotone" dataKey="epsilon" stroke={CHART_COLORS.WARNING} strokeWidth={2} dot={false} activeDot={false} />
+                  <XAxis dataKey="episode" tick={{ fontSize: 11 }} interval="preserveStartEnd" label={{ value: 'Episode', position: 'insideBottom', offset: -12, fontSize: 12 }} />
+                  <YAxis domain={['auto', 'auto']} tick={{ fontSize: 11 }} label={{ value: 'Avg Revenue ($)', angle: -90, position: 'insideLeft', offset: 0, fontSize: 12 }} />
+                  <RechartsTooltip formatter={(value: number) => `$${value.toLocaleString()}`} />
+                  <Line type="monotone" dataKey="revenue" stroke={CHART_COLORS.SUCCESS} strokeWidth={2} dot={false} activeDot={false} name="RL Agent" />
+                  <Line type="monotone" dataKey="staticRevenue" stroke="var(--color-neutral-400)" strokeWidth={2} strokeDasharray="6 4" dot={false} activeDot={false} name="Static (1.0x)" />
                 </RechartsLineChart>
               </ResponsiveContainer>
             </div>
@@ -331,7 +395,7 @@ export function RlTraining({ training }: RlTrainingProps) {
             <Typography variant="heading-sm" style={{ marginBottom: '12px' }}>Reading the Q-Table</Typography>
             <Typography variant="body-xs" style={{ color: 'var(--color-secondary)', marginBottom: '12px' }}>
               Each row is a <strong>state</strong> (a market condition the agent has encountered).
-              Each column is an <strong>action</strong> (a price multiplier from 0.70x to 1.20x).
+              Each column is an <strong>action</strong> (a price multiplier from 0.80x to 1.60x).
             </Typography>
             <Typography variant="body-xs" style={{ color: 'var(--color-secondary)', marginBottom: '12px' }}>
               Cell values are <strong>Q-values</strong> — the agent's learned estimate of how much reward

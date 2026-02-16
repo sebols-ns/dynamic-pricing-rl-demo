@@ -69,10 +69,12 @@ export class QLearningAgent {
     );
   }
 
-  runEpisode(env: PricingEnvironment, stepsPerEpisode: number = 100): EpisodeResult & { explorationCount: number } {
+  runEpisode(env: PricingEnvironment, stepsPerEpisode: number = 200): EpisodeResult & { explorationCount: number } {
     let state = env.reset();
     let stateIndex = env.stateToIndex(state);
     let totalReward = 0;
+    let totalRevenue = 0;
+    let totalMargin = 0;
     let explorationCount = 0;
 
     for (let step = 0; step < stepsPerEpisode; step++) {
@@ -87,6 +89,8 @@ export class QLearningAgent {
       state = result.nextState;
       stateIndex = nextStateIndex;
       totalReward += result.reward;
+      totalRevenue += result.revenue;
+      totalMargin += result.margin;
     }
 
     this.decayEpsilon();
@@ -95,6 +99,8 @@ export class QLearningAgent {
       episode: 0, // caller sets this
       totalReward,
       avgReward: totalReward / stepsPerEpisode,
+      avgRevenue: totalRevenue / stepsPerEpisode,
+      avgMargin: totalMargin / stepsPerEpisode,
       epsilon: this.epsilon,
       steps: stepsPerEpisode,
       explorationCount,

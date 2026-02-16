@@ -5,7 +5,7 @@ export interface State {
   lagPriceBin: number;
 }
 
-export const ACTION_MULTIPLIERS = [0.70, 0.80, 0.85, 0.90, 0.95, 1.00, 1.05, 1.10, 1.15, 1.20] as const;
+export const ACTION_MULTIPLIERS = [0.80, 0.90, 0.95, 1.00, 1.05, 1.10, 1.15, 1.20, 1.30, 1.40, 1.50, 1.60] as const;
 export const NUM_ACTIONS = ACTION_MULTIPLIERS.length;
 
 export const DEMAND_BINS = 3;
@@ -30,16 +30,18 @@ export const DEFAULT_CONFIG: TrainingConfig = {
   discountFactor: 0.0, // Contextual bandit: pricing decisions are independent
   epsilonStart: 1.0,
   epsilonEnd: 0.01,
-  epsilonDecay: 0.998,
-  episodes: 1500,
-  earlyStopPatience: 100,
-  earlyStopThreshold: 0.005,
+  epsilonDecay: 0.997,
+  episodes: 5000,
+  earlyStopPatience: 300,
+  earlyStopThreshold: 0.002,
 };
 
 export interface EpisodeResult {
   episode: number;
   totalReward: number;
   avgReward: number;
+  avgRevenue: number;
+  avgMargin: number;
   epsilon: number;
   steps: number;
 }

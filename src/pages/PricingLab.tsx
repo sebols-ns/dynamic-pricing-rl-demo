@@ -37,7 +37,8 @@ export function PricingLab() {
     const stateIndex = env.stateToIndex(state);
     const bestAction = agent.getBestAction(stateIndex);
     const rlResult = env.simulateAction(state, bestAction, { demandMultiplier: demand });
-    const staticResult = env.simulateAction(state, 5, { demandMultiplier: demand });
+    const staticActionIdx = ACTION_MULTIPLIERS.indexOf(1.00);
+    const staticResult = env.simulateAction(state, staticActionIdx >= 0 ? staticActionIdx : 3, { demandMultiplier: demand });
 
     let randomRevenue = 0, randomMargin = 0, randomVolume = 0;
     for (let a = 0; a < NUM_ACTIONS; a++) {
