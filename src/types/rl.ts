@@ -30,14 +30,14 @@ export interface TrainingConfig {
 }
 
 export const DEFAULT_CONFIG: TrainingConfig = {
-  learningRate: 0.2,
+  learningRate: 0.15,
   discountFactor: 0.0, // Contextual bandit: pricing decisions are independent
   epsilonStart: 1.0,
   epsilonEnd: 0.01,
-  epsilonDecay: 0.9975,
-  episodes: 8000,
-  earlyStopPatience: 400,
-  earlyStopThreshold: 0.002,
+  epsilonDecay: 0.999,
+  episodes: 15000,
+  earlyStopPatience: 800,
+  earlyStopThreshold: 0.001,
 };
 
 export interface EpisodeResult {
