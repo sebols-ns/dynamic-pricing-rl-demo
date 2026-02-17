@@ -346,8 +346,12 @@ export function DemandModel({ gbrtTraining, onComplete }: DemandModelProps) {
             <div className="flex flex-wrap" style={{ gap: '6px' }}>
               {gbrtTraining.isComplete ? (
                 <>
-                  <Badge variant="success">Complete</Badge>
-                  <Badge variant="primary">Test R² = {gbrtTraining.testR2.toFixed(3)}</Badge>
+                  <Badge variant="success">
+                    {gbrtTraining.earlyStopped
+                      ? `Early stopped at tree ${gbrtTraining.currentTree}`
+                      : 'Complete'}
+                  </Badge>
+                  <Badge variant="primary">Best Test R² = {gbrtTraining.bestTestR2.toFixed(3)} (tree {gbrtTraining.bestTestTree})</Badge>
                   <Badge variant="neutral">Train R² = {gbrtTraining.trainR2.toFixed(3)}</Badge>
                 </>
               ) : gbrtTraining.currentTree > 0 ? (
@@ -364,7 +368,10 @@ export function DemandModel({ gbrtTraining, onComplete }: DemandModelProps) {
             <div style={{ marginBottom: '24px' }}>
               <div className="flex items-center justify-between" style={{ marginBottom: '6px' }}>
                 <Typography variant="label-sm-bold">
-                  {gbrtTraining.isRunning ? 'Training...' : gbrtTraining.isComplete ? 'Complete' : 'Paused'}
+                  {gbrtTraining.isRunning ? 'Training...'
+                    : gbrtTraining.earlyStopped ? 'Early stopped (test R² plateaued)'
+                    : gbrtTraining.isComplete ? 'Complete'
+                    : 'Paused'}
                 </Typography>
                 <Typography variant="label-sm" style={{ color: 'var(--color-secondary)' }}>
                   Tree {gbrtTraining.currentTree} / {gbrtTraining.totalTrees} ({progress}%)
@@ -466,7 +473,8 @@ export function DemandModel({ gbrtTraining, onComplete }: DemandModelProps) {
                     <XAxis dataKey="tree" tick={{ fontSize: 11 }} label={{ value: 'Trees', position: 'insideBottom', offset: -12, fontSize: 12 }} />
                     <YAxis
                       tick={{ fontSize: 11 }}
-                      domain={[0, 1]}
+                      domain={['auto', 'auto']}
+                      tickFormatter={(v: number) => v.toFixed(2)}
                       label={{ value: 'R²', angle: -90, position: 'insideLeft', offset: 4, fontSize: 12 }}
                     />
                     <RechartsTooltip formatter={((v: number) => v.toFixed(4)) as any} />
