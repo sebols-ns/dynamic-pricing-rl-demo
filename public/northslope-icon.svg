@@ -1,4 +1,4 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 85" fill="currentColor">
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 85" fill="#1a1a1a">
   <!-- Outer mountain chevron -->
   <polygon points="50,0 100,80 83,80 50,28 17,80 0,80" />
   <!-- Inner peak in the valley -->
