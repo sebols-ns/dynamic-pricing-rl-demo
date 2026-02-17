@@ -372,69 +372,73 @@ function App() {
               </main>
 
               {/* Learn overlay */}
-              {learnOpen && (
+              <div
+                style={{
+                  position: 'fixed',
+                  inset: 0,
+                  zIndex: 40,
+                  pointerEvents: learnOpen ? 'auto' : 'none',
+                }}
+              >
+                {/* Backdrop */}
+                <div
+                  onClick={() => setLearnOpen(false)}
+                  style={{
+                    position: 'absolute',
+                    inset: 0,
+                    backgroundColor: learnOpen ? 'rgba(0,0,0,0.4)' : 'rgba(0,0,0,0)',
+                    backdropFilter: learnOpen ? 'blur(4px)' : 'blur(0px)',
+                    WebkitBackdropFilter: learnOpen ? 'blur(4px)' : 'blur(0px)',
+                    transition: 'background-color 0.25s ease, backdrop-filter 0.25s ease, -webkit-backdrop-filter 0.25s ease',
+                  }}
+                />
+                {/* Panel – slides in from right */}
                 <div
                   style={{
-                    position: 'fixed',
-                    inset: 0,
-                    zIndex: 40,
-                    display: 'flex',
-                    flexDirection: 'column',
+                    position: 'absolute',
+                    top: '24px',
+                    right: '24px',
+                    bottom: '24px',
+                    width: '60%',
+                    maxWidth: '900px',
+                    borderRadius: '12px',
+                    backgroundColor: 'var(--color-base-white)',
+                    overflow: 'auto',
+                    boxShadow: '0 25px 50px -12px rgba(0,0,0,0.25)',
+                    transform: learnOpen ? 'translateX(0)' : 'translateX(calc(100% + 24px))',
+                    opacity: learnOpen ? 1 : 0,
+                    transition: 'transform 0.25s ease, opacity 0.2s ease',
                   }}
                 >
-                  {/* Backdrop */}
-                  <div
+                  {/* Close button */}
+                  <button
                     onClick={() => setLearnOpen(false)}
                     style={{
-                      position: 'absolute',
-                      inset: 0,
-                      backgroundColor: 'rgba(0,0,0,0.5)',
-                      backdropFilter: 'blur(4px)',
-                      WebkitBackdropFilter: 'blur(4px)',
-                    }}
-                  />
-                  {/* Content */}
-                  <div
-                    style={{
-                      position: 'relative',
-                      margin: '32px',
-                      flex: 1,
-                      borderRadius: '12px',
+                      position: 'sticky',
+                      top: '16px',
+                      float: 'right',
+                      marginRight: '16px',
+                      zIndex: 1,
+                      width: '32px',
+                      height: '32px',
+                      borderRadius: '6px',
+                      border: '1px solid var(--color-subtle)',
                       backgroundColor: 'var(--color-base-white)',
-                      overflow: 'auto',
-                      boxShadow: '0 25px 50px -12px rgba(0,0,0,0.25)',
+                      color: 'var(--color-secondary)',
+                      cursor: 'pointer',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      fontSize: '18px',
                     }}
                   >
-                    {/* Close button */}
-                    <button
-                      onClick={() => setLearnOpen(false)}
-                      style={{
-                        position: 'sticky',
-                        top: '16px',
-                        float: 'right',
-                        marginRight: '16px',
-                        zIndex: 1,
-                        width: '32px',
-                        height: '32px',
-                        borderRadius: '6px',
-                        border: '1px solid var(--color-subtle)',
-                        backgroundColor: 'var(--color-base-white)',
-                        color: 'var(--color-secondary)',
-                        cursor: 'pointer',
-                        display: 'flex',
-                        alignItems: 'center',
-                        justifyContent: 'center',
-                        fontSize: '18px',
-                      }}
-                    >
-                      &times;
-                    </button>
-                    <div style={{ padding: '32px', maxWidth: '1280px', margin: '0 auto' }}>
-                      <Learn onNavigate={handleLearnNavigate} />
-                    </div>
+                    &times;
+                  </button>
+                  <div style={{ padding: '32px' }}>
+                    <Learn onNavigate={handleLearnNavigate} />
                   </div>
                 </div>
-              )}
+              </div>
             </div>
           </TrainedAgentContext.Provider>
         </DemandModelContext.Provider>
