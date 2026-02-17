@@ -52,6 +52,7 @@ export function adaptInventoryRows(raw: Record<string, string>[]): RetailRow[] {
       const seasonMonth = SEASON_MAP[seasonStr] ?? month;
       const inventoryLevel = parseFloat(row['Inventory Level'] ?? '0') || 0;
       const demandForecast = parseFloat(row['Demand Forecast'] ?? '0') || 0;
+      const discount = parseFloat(row['Discount'] ?? '0') || 0;
 
       result.push({
         product_id: row['Product ID'] ?? '',
@@ -86,6 +87,7 @@ export function adaptInventoryRows(raw: Record<string, string>[]): RetailRow[] {
         fp3: 0,
         inventory_level: inventoryLevel,
         demand_forecast: demandForecast,
+        discount,
       });
 
       prevPrice = price;

@@ -10,10 +10,12 @@ import { useGbrtTraining } from './hooks/useGbrtTraining';
 import { usePipelineState, type PipelineStep } from './hooks/usePipelineState';
 import { PipelineStepper } from './components/PipelineStepper';
 import { LearnPanel } from './components/LearnPanel';
+import { DatasetSelector } from './pages/DatasetSelector';
 import { DataExplorer } from './pages/DataExplorer';
 import { DemandModel } from './pages/DemandModel';
 import { RlTraining } from './pages/RlTraining';
 import { Results } from './pages/Results';
+import { Backtesting } from './pages/Backtesting';
 import { Explainability } from './pages/Explainability';
 import type { QLearningAgent } from './engine/q-learning';
 import type { PricingEnvironment } from './engine/environment';
@@ -60,15 +62,19 @@ function App() {
     setTrained,
   };
 
-  // Auto-completion: data loaded → mark 'data' complete
+  // Auto-completion: data loaded → mark 'dataset' and 'data' steps complete
   useEffect(() => {
     if (csvData.isLoaded) {
+      pipeline.markComplete('dataset');
       pipeline.markComplete('data');
-      if (pipeline.activeStep === 'data') {
-        pipeline.setActiveStep('demand-model');
-      }
     }
   }, [csvData.isLoaded]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Handle dataset selection → advance to explore
+  const handleDatasetSelected = useCallback(() => {
+    pipeline.markComplete('dataset');
+    pipeline.setActiveStep('data');
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Auto-completion: demand model ready → mark 'demand-model' complete
   useEffect(() => {
@@ -76,6 +82,16 @@ function App() {
       pipeline.markComplete('demand-model');
     }
   }, [demandModelState.isReady, csvData.isLoaded]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // When demand mode changes, reset demand-model completion + downstream
+  // so the user must train GBT (or switch back to simple) before advancing
+  useEffect(() => {
+    pipeline.resetFrom('demand-model');
+    // Re-mark if already ready (e.g. switching back to simple, or GBT already trained)
+    if (demandModelState.isReady && csvData.isLoaded) {
+      pipeline.markComplete('demand-model');
+    }
+  }, [demandModelState.mode]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // When GBRT training completes in advanced mode, update demand model context
   useEffect(() => {
@@ -89,11 +105,12 @@ function App() {
     if (trainedAgent && trainedEpisode > 0 && !training.isRunning) {
       pipeline.markComplete('training');
       pipeline.markComplete('results');
+      pipeline.markComplete('validation');
       pipeline.markComplete('explainability');
     }
   }, [trainedAgent, trainedEpisode, training.isRunning]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  // Dataset switch resets downstream completions
+  // Dataset switch resets downstream completions (but keeps dataset + data complete)
   useEffect(() => {
     pipeline.resetFrom('demand-model');
     demandModelState.setModel(null);
@@ -103,17 +120,18 @@ function App() {
   // Handle demand model completion → auto-advance to training
   const handleDemandModelComplete = useCallback(() => {
     pipeline.markComplete('demand-model');
-    pipeline.setActiveStep('training');
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Handle pipeline step navigation from Learn panel
   const handleLearnNavigate = useCallback((step: string) => {
     // Map old tab names to pipeline steps
     const mapping: Record<string, PipelineStep> = {
+      dataset: 'dataset',
       data: 'data',
       training: 'training',
       'pricing-lab': 'results',
-      backtesting: 'results',
+      backtesting: 'validation',
+      validation: 'validation',
       explainability: 'explainability',
     };
     const pipelineStep = mapping[step] ?? step;
@@ -125,6 +143,8 @@ function App() {
 
   const renderActiveStep = () => {
     switch (pipeline.activeStep) {
+      case 'dataset':
+        return <DatasetSelector onSelected={handleDatasetSelected} />;
       case 'data':
         return <DataExplorer />;
       case 'demand-model':
@@ -133,10 +153,12 @@ function App() {
         return <RlTraining training={training} />;
       case 'results':
         return <Results />;
+      case 'validation':
+        return <Backtesting />;
       case 'explainability':
         return <Explainability />;
       default:
-        return <DataExplorer />;
+        return <DatasetSelector onSelected={handleDatasetSelected} />;
     }
   };
 

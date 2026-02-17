@@ -200,7 +200,7 @@ export function RlTraining({ training }: RlTrainingProps) {
         </div>
       </div>
 
-      {/* Train/Test Split Info */}
+      {/* Train/Test Split Info
       {trainTestSplit && (
         <div style={{ ...cardStyle, backgroundColor: 'var(--color-success-subtle)', borderColor: 'var(--color-green-200)', marginBottom: '24px' }}>
           <div className="flex items-center" style={{ gap: '8px', marginBottom: '8px' }}>
@@ -213,7 +213,7 @@ export function RlTraining({ training }: RlTrainingProps) {
             The remaining <strong>{trainTestSplit.testDateRange}</strong> is held out for out-of-sample evaluation in the Validation tab.
           </Typography>
         </div>
-      )}
+      )} */}
 
       {/* Data Pipeline */}
       <div style={{ ...cardStyle, marginBottom: '24px' }}>

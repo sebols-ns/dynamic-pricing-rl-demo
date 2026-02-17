@@ -31,6 +31,7 @@ export interface RetailRow {
   lag_price: number;
   inventory_level: number;
   demand_forecast: number;
+  discount: number;
 }
 
 export interface ProductSummary {

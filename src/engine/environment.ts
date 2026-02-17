@@ -4,7 +4,7 @@ import { ACTION_MULTIPLIERS, DEMAND_BINS, COMPETITOR_BINS, SEASON_BINS, LAG_PRIC
 import { quantileBins, digitize, mean } from '../utils/math';
 import { computeReward } from './reward';
 import type { GBRTModel } from './gbrt';
-import { predictModel } from './gbrt';
+import { predictModel, encodeCategory } from './gbrt';
 
 export interface EnvironmentConfig {
   productRows: RetailRow[];
@@ -182,12 +182,12 @@ export class PricingEnvironment {
       row.comp_1,
       row.month,
       row.lag_price,
-      row.inventory_level,
-      row.demand_forecast,
       row.holiday,
       row.weekday,
       row.product_score,
       row.freight_price,
+      encodeCategory(row.product_category_name),
+      row.discount,
     ];
     return Math.max(1, predictModel(this.demandModel, features));
   }
@@ -213,18 +213,9 @@ export class PricingEnvironment {
       : [this.basePrice * 0.9, this.basePrice, this.basePrice * 1.1];
     const lag = lagValues[Math.min(state.lagPriceBin, lagValues.length - 1)];
 
-    // Approximate inventory/forecast from bins
-    const invValues = this.inventoryThresholds.length > 1
-      ? [this.inventoryThresholds[0] * 0.5, mean(this.inventoryThresholds), this.inventoryThresholds[this.inventoryThresholds.length - 1] * 1.5]
-      : [50, 100, 200];
-    const inv = invValues[Math.min(state.inventoryBin, invValues.length - 1)];
-
-    const frcValues = this.forecastThresholds.length > 1
-      ? [this.forecastThresholds[0] * 0.5, mean(this.forecastThresholds), this.forecastThresholds[this.forecastThresholds.length - 1] * 1.5]
-      : [this.baseQty * 0.7, this.baseQty, this.baseQty * 1.3];
-    const frc = frcValues[Math.min(state.forecastBin, frcValues.length - 1)];
-
-    return [price, comp, month, lag, inv, frc, 0, 3, 4.0, this.baseCost];
+    const cat = encodeCategory(this.rows[0].product_category_name);
+    const disc = mean(this.rows.map(r => r.discount));
+    return [price, comp, month, lag, 0, 3, 4.0, this.baseCost, cat, disc];
   }
 
   hasDemandModel(): boolean {

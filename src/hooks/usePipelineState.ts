@@ -1,13 +1,15 @@
 import { useState, useCallback } from 'react';
 
-export const PIPELINE_STEPS = ['data', 'demand-model', 'training', 'results', 'explainability'] as const;
+export const PIPELINE_STEPS = ['dataset', 'data', 'demand-model', 'training', 'results', 'validation', 'explainability'] as const;
 export type PipelineStep = typeof PIPELINE_STEPS[number];
 
 export const STEP_LABELS: Record<PipelineStep, string> = {
-  'data': 'Data',
+  'dataset': 'Dataset',
+  'data': 'Explore',
   'demand-model': 'Demand Model',
   'training': 'RL Training',
   'results': 'Results',
+  'validation': 'Validation',
   'explainability': 'Explainability',
 };
 
@@ -21,7 +23,7 @@ export interface PipelineState {
 }
 
 export function usePipelineState(): PipelineState {
-  const [activeStep, setActiveStepRaw] = useState<PipelineStep>('data');
+  const [activeStep, setActiveStepRaw] = useState<PipelineStep>('dataset');
   const [completedSteps, setCompletedSteps] = useState<Set<PipelineStep>>(new Set());
 
   const canNavigateTo = useCallback((step: PipelineStep): boolean => {

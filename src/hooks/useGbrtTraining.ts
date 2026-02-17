@@ -6,6 +6,11 @@ import {
   DEFAULT_GBRT_CONFIG, prepareFeatures, initTraining, trainOneTree, generateDemandCurve,
 } from '../engine/gbrt';
 
+export interface R2HistoryPoint {
+  tree: number;
+  r2: number;
+}
+
 interface GbrtTrainingState {
   isRunning: boolean;
   isComplete: boolean;
@@ -18,6 +23,7 @@ interface GbrtTrainingState {
   actuals: Float64Array | null;
   model: GBRTModel | null;
   demandCurveData: DemandCurvePoint[];
+  r2History: R2HistoryPoint[];
 }
 
 const UI_UPDATE_INTERVAL_MS = 80;
@@ -35,6 +41,7 @@ export function useGbrtTraining() {
     actuals: null,
     model: null,
     demandCurveData: [],
+    r2History: [],
   });
 
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -44,9 +51,11 @@ export function useGbrtTraining() {
   const isRunningRef = useRef(false);
   const treeIndexRef = useRef(0);
   const speedRef = useRef(1);
+  const r2HistoryRef = useRef<R2HistoryPoint[]>([]);
 
   const flushSnapshot = useCallback((snapshot: GBRTSnapshot, ctx: TrainingContext) => {
     const curve = generateDemandCurve(ctx.model, rowsRef.current);
+    r2HistoryRef.current.push({ tree: snapshot.treeIndex + 1, r2: snapshot.trainR2 });
     setState(prev => ({
       ...prev,
       currentTree: snapshot.treeIndex + 1,
@@ -57,6 +66,7 @@ export function useGbrtTraining() {
       actuals: dataRef.current?.y ?? null,
       model: ctx.model,
       demandCurveData: curve,
+      r2History: r2HistoryRef.current.slice(),
     }));
   }, []);
 
@@ -71,6 +81,7 @@ export function useGbrtTraining() {
     ctxRef.current = ctx;
     rowsRef.current = rows;
     treeIndexRef.current = 0;
+    r2HistoryRef.current = [];
 
     setState({
       isRunning: false,
@@ -84,6 +95,7 @@ export function useGbrtTraining() {
       actuals: data.y,
       model: null,
       demandCurveData: [],
+      r2History: [],
     });
   }, []);
 
@@ -115,7 +127,7 @@ export function useGbrtTraining() {
   const play = useCallback(() => {
     if (!ctxRef.current) return;
     isRunningRef.current = true;
-    setState(prev => ({ ...prev, isRunning: true }));
+    setState(prev => ({ ...prev, isRunning: true, isComplete: false }));
     timerRef.current = setTimeout(runBatch, 0);
   }, [runBatch]);
 
@@ -140,6 +152,7 @@ export function useGbrtTraining() {
   const reset = useCallback(() => {
     if (timerRef.current) clearTimeout(timerRef.current);
     isRunningRef.current = false;
+    r2HistoryRef.current = [];
     if (dataRef.current && rowsRef.current.length > 0) {
       const ctx = initTraining(dataRef.current, ctxRef.current?.config ?? DEFAULT_GBRT_CONFIG);
       ctxRef.current = ctx;
@@ -155,6 +168,18 @@ export function useGbrtTraining() {
       predictions: null,
       model: null,
       demandCurveData: [],
+      r2History: [],
+    }));
+  }, []);
+
+  const trainMore = useCallback((additionalTrees: number) => {
+    if (!ctxRef.current) return;
+    const ctx = ctxRef.current;
+    ctx.config.nTrees += additionalTrees;
+    setState(prev => ({
+      ...prev,
+      totalTrees: ctx.config.nTrees,
+      isComplete: false,
     }));
   }, []);
 
@@ -169,6 +194,7 @@ export function useGbrtTraining() {
     pause,
     stepOnce,
     reset,
+    trainMore,
     setSpeed,
   };
 }

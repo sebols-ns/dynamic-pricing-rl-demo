@@ -13,6 +13,8 @@ import {
 import { useCsvData } from '../hooks/useCsvData';
 import { useDemandModel } from '../hooks/useDemandModel';
 import { useGbrtTraining } from '../hooks/useGbrtTraining';
+import { TreeVisualization } from '../components/TreeVisualization';
+import { mean } from '../utils/math';
 
 const cardStyle: React.CSSProperties = {
   border: '1px solid var(--color-subtle)',
@@ -27,11 +29,21 @@ interface DemandModelProps {
 }
 
 export function DemandModel({ gbrtTraining, onComplete }: DemandModelProps) {
-  const { rows, products, isLoaded } = useCsvData();
+  const { rows, products, isLoaded, datasetName } = useCsvData();
   const { mode, setMode } = useDemandModel();
   const [selectedProduct, setSelectedProduct] = useState('');
   const [speed, setSpeed] = useState(1);
   const [showTransition, setShowTransition] = useState(false);
+
+  const isStoreInventory = datasetName === 'store_inventory';
+  const gbtAvailable = !isStoreInventory;
+
+  // Force back to simple when switching to a dataset that doesn't support GBT
+  useEffect(() => {
+    if (isStoreInventory && mode === 'advanced') {
+      setMode('simple');
+    }
+  }, [isStoreInventory]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Initialize training when switching to advanced mode
   useEffect(() => {
@@ -51,12 +63,24 @@ export function DemandModel({ gbrtTraining, onComplete }: DemandModelProps) {
     }
   }, [isLoaded, products, selectedProduct]);
 
-  // Generate product-specific demand curve
-  const productDemandCurve = useMemo(() => {
-    if (!gbrtTraining.model || !selectedProduct) return gbrtTraining.demandCurveData;
-    // Use the general demand curve data (based on all rows) as default
-    return gbrtTraining.demandCurveData;
-  }, [gbrtTraining.model, gbrtTraining.demandCurveData, selectedProduct]);
+  // Combined demand curve: GBT predictions + log-linear overlay for comparison
+  const comparisonCurveData = useMemo(() => {
+    if (!gbrtTraining.demandCurveData.length || rows.length === 0) return [];
+    // Compute log-linear curve using same price range
+    const basePrice = mean(rows.map(r => r.unit_price));
+    const baseQty = mean(rows.map(r => r.qty));
+    const elasticity = 0.7;
+
+    return gbrtTraining.demandCurveData.map(pt => {
+      const ratio = pt.price / basePrice;
+      const logLinearQty = baseQty * Math.exp(-elasticity * (ratio - 1));
+      return {
+        price: pt.price,
+        gbt: pt.qty,
+        logLinear: Math.round(logLinearQty * 10) / 10,
+      };
+    });
+  }, [gbrtTraining.demandCurveData, rows]);
 
   // Subsample scatter data for render performance
   const scatterData = useMemo(() => {
@@ -122,59 +146,74 @@ export function DemandModel({ gbrtTraining, onComplete }: DemandModelProps) {
       </Typography>
 
       {/* Mode toggle */}
-      <div style={{ display: 'flex', gap: '0', marginBottom: '24px' }}>
-        <button
-          onClick={() => setMode('simple')}
-          style={{
-            padding: '10px 24px',
-            borderRadius: '8px 0 0 8px',
-            border: '1px solid var(--color-subtle)',
-            borderRight: 'none',
-            fontSize: '14px',
-            fontWeight: mode === 'simple' ? 700 : 400,
-            backgroundColor: mode === 'simple' ? 'var(--color-interactive)' : 'var(--color-base-white)',
-            color: mode === 'simple' ? 'white' : 'var(--color-secondary)',
-            cursor: 'pointer',
-            transition: 'all 0.15s',
-          }}
-        >
-          Simple (Log-Linear)
-        </button>
-        <button
-          onClick={() => setMode('advanced')}
-          style={{
-            padding: '10px 24px',
-            borderRadius: '0 8px 8px 0',
-            border: '1px solid var(--color-subtle)',
-            fontSize: '14px',
-            fontWeight: mode === 'advanced' ? 700 : 400,
-            backgroundColor: mode === 'advanced' ? 'var(--color-interactive)' : 'var(--color-base-white)',
-            color: mode === 'advanced' ? 'white' : 'var(--color-secondary)',
-            cursor: 'pointer',
-            transition: 'all 0.15s',
-          }}
-        >
-          Advanced (Gradient Boosted Trees)
-        </button>
+      <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '24px' }}>
+        <div style={{ display: 'flex', gap: '0' }}>
+          <button
+            onClick={() => setMode('simple')}
+            style={{
+              padding: '10px 24px',
+              borderRadius: gbtAvailable ? '8px 0 0 8px' : '8px',
+              border: '1px solid var(--color-subtle)',
+              borderRight: gbtAvailable ? 'none' : undefined,
+              fontSize: '14px',
+              fontWeight: mode === 'simple' ? 700 : 400,
+              backgroundColor: mode === 'simple' ? 'var(--color-interactive)' : 'var(--color-base-white)',
+              color: mode === 'simple' ? 'white' : 'var(--color-secondary)',
+              cursor: 'pointer',
+              transition: 'all 0.15s',
+            }}
+          >
+            {isStoreInventory ? 'Dataset Forecast' : 'Simple (Log-Linear)'}
+          </button>
+          {gbtAvailable && (
+            <button
+              onClick={() => setMode('advanced')}
+              style={{
+                padding: '10px 24px',
+                borderRadius: '0 8px 8px 0',
+                border: '1px solid var(--color-subtle)',
+                fontSize: '14px',
+                fontWeight: mode === 'advanced' ? 700 : 400,
+                backgroundColor: mode === 'advanced' ? 'var(--color-interactive)' : 'var(--color-base-white)',
+                color: mode === 'advanced' ? 'white' : 'var(--color-secondary)',
+                cursor: 'pointer',
+                transition: 'all 0.15s',
+              }}
+            >
+              Advanced (Gradient Boosted Trees)
+            </button>
+          )}
+        </div>
+        {isStoreInventory && (
+          <span style={{ fontSize: '12px', color: 'var(--color-secondary)' }}>
+            This dataset includes a pre-computed demand forecast — GBT training is not needed.
+          </span>
+        )}
       </div>
 
       {/* Simple mode */}
       {mode === 'simple' && (
         <div>
           <div style={{ ...cardStyle, marginBottom: '24px' }}>
-            <Typography variant="heading-sm" style={{ marginBottom: '12px' }}>Log-Linear Elasticity Model</Typography>
+            <Typography variant="heading-sm" style={{ marginBottom: '12px' }}>
+              {isStoreInventory ? 'Dataset Demand Forecast + Elasticity' : 'Log-Linear Elasticity Model'}
+            </Typography>
             <Typography variant="body-sm" style={{ color: 'var(--color-secondary)', marginBottom: '16px' }}>
-              Demand is simulated using a hand-coded elasticity formula. This is an assumption, not learned from data.
+              {isStoreInventory
+                ? 'This dataset includes a pre-computed demand forecast for each row. The RL agent uses this forecast as the base demand, then applies an elasticity formula to model how demand responds to price changes.'
+                : 'Demand is simulated using a hand-coded elasticity formula. This is an assumption, not learned from data.'}
             </Typography>
             <Typography variant="body-sm">
               <code className="text-sm px-2 py-1 rounded block" style={{ background: 'var(--color-gray)' }}>
-                Q = Q_base x exp(-elasticity x (P - P_base) / P_base)
+                {isStoreInventory
+                  ? 'Q = demand_forecast × exp(-elasticity × (P - P_base) / P_base)'
+                  : 'Q = Q_base × exp(-elasticity × (P - P_base) / P_base)'}
               </code>
             </Typography>
             <Typography variant="body-xs" style={{ color: 'var(--color-secondary)', marginTop: '12px' }}>
-              Elasticity varies by market state (demand level, competitor price, season). Higher elasticity means
-              customers are more price-sensitive. The base elasticity is 0.7, modulated by state-dependent factors
-              ranging from 0.2 to 4.0.
+              {isStoreInventory
+                ? 'The demand forecast from the dataset provides a per-row baseline quantity. The elasticity formula then adjusts this based on the agent\'s pricing decisions. Elasticity varies by market state (competitor price, season, inventory level).'
+                : 'Elasticity varies by market state (demand level, competitor price, season). Higher elasticity means customers are more price-sensitive. The base elasticity is 0.7, modulated by state-dependent factors ranging from 0.2 to 4.0.'}
             </Typography>
           </div>
 
@@ -235,6 +274,14 @@ export function DemandModel({ gbrtTraining, onComplete }: DemandModelProps) {
               <Button onClick={gbrtTraining.stepOnce} variant="outline" disabled={gbrtTraining.isRunning || gbrtTraining.isComplete}>
                 Step
               </Button>
+              {gbrtTraining.isComplete && (
+                <Button
+                  onClick={() => { gbrtTraining.trainMore(500); gbrtTraining.play(); }}
+                  variant="outline"
+                >
+                  +500 Trees
+                </Button>
+              )}
               <Button onClick={gbrtTraining.reset} variant="ghost">
                 Reset
               </Button>
@@ -328,35 +375,68 @@ export function DemandModel({ gbrtTraining, onComplete }: DemandModelProps) {
                 </ResponsiveContainer>
               </div>
 
-              {/* Demand curve */}
+              {/* Demand curve comparison: GBT vs Log-Linear */}
               <div style={cardStyle}>
-                <div className="flex items-center justify-between" style={{ marginBottom: '12px' }}>
-                  <Typography variant="label-md-bold">Learned Demand Curve</Typography>
-                  {products.length > 0 && (
-                    <Select value={selectedProduct} onValueChange={setSelectedProduct}>
-                      <SelectTrigger width="compact">
-                        <SelectValue placeholder="Product" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {products.slice(0, 20).map(p => (
-                          <SelectItem key={p.id} value={p.id}>
-                            {p.id}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                  )}
+                <div className="flex items-center justify-between" style={{ marginBottom: '4px' }}>
+                  <Typography variant="label-md-bold">Demand Curve Comparison</Typography>
+                </div>
+                <Typography variant="body-xs" style={{ color: 'var(--color-secondary)', marginBottom: '12px' }}>
+                  GBT learned from data vs the hand-coded log-linear formula. Differences show where the simple model's assumptions break down.
+                </Typography>
+                <div className="flex items-center" style={{ gap: '16px', marginBottom: '8px', fontSize: '12px' }}>
+                  <span style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+                    <span style={{ width: 16, height: 3, backgroundColor: 'var(--color-interactive)', display: 'inline-block', borderRadius: 1 }} /> GBT Model
+                  </span>
+                  <span style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+                    <span style={{ width: 16, height: 3, backgroundColor: 'var(--color-neutral-400)', display: 'inline-block', borderRadius: 1, borderTop: '1px dashed' }} /> Log-Linear
+                  </span>
                 </div>
                 <ResponsiveContainer width="100%" height={300}>
-                  <LineChart data={productDemandCurve} margin={{ top: 8, right: 16, left: 8, bottom: 24 }}>
+                  <LineChart data={comparisonCurveData} margin={{ top: 8, right: 16, left: 8, bottom: 24 }}>
                     <CartesianGrid strokeDasharray="3 3" stroke="var(--color-neutral-200)" />
                     <XAxis dataKey="price" tick={{ fontSize: 11 }} label={{ value: 'Price ($)', position: 'insideBottom', offset: -12, fontSize: 12 }} />
                     <YAxis tick={{ fontSize: 11 }} label={{ value: 'Predicted Qty', angle: -90, position: 'insideLeft', offset: 4, fontSize: 12 }} />
                     <RechartsTooltip />
-                    <Line type="monotone" dataKey="qty" stroke="var(--color-interactive)" strokeWidth={2} dot={false} isAnimationActive={false} />
+                    <Line type="monotone" dataKey="gbt" name="GBT Model" stroke="var(--color-interactive)" strokeWidth={2} dot={false} isAnimationActive={false} />
+                    <Line type="monotone" dataKey="logLinear" name="Log-Linear" stroke="var(--color-neutral-400)" strokeWidth={2} strokeDasharray="6 4" dot={false} isAnimationActive={false} />
                   </LineChart>
                 </ResponsiveContainer>
               </div>
+
+              {/* R² over time */}
+              <div style={cardStyle}>
+                <Typography variant="label-md-bold" style={{ marginBottom: '4px' }}>R² Over Training</Typography>
+                <Typography variant="body-xs" style={{ color: 'var(--color-secondary)', marginBottom: '12px' }}>
+                  Model accuracy as trees are added. Diminishing returns indicate the model has converged.
+                </Typography>
+                <ResponsiveContainer width="100%" height={300}>
+                  <LineChart data={gbrtTraining.r2History} margin={{ top: 8, right: 16, left: 8, bottom: 24 }}>
+                    <CartesianGrid strokeDasharray="3 3" stroke="var(--color-neutral-200)" />
+                    <XAxis dataKey="tree" tick={{ fontSize: 11 }} label={{ value: 'Trees', position: 'insideBottom', offset: -12, fontSize: 12 }} />
+                    <YAxis
+                      tick={{ fontSize: 11 }}
+                      domain={[0, 1]}
+                      label={{ value: 'R²', angle: -90, position: 'insideLeft', offset: 4, fontSize: 12 }}
+                    />
+                    <RechartsTooltip formatter={((v: number) => v.toFixed(4)) as any} />
+                    <Line type="monotone" dataKey="r2" name="R²" stroke="var(--color-success)" strokeWidth={2} dot={false} isAnimationActive={false} />
+                  </LineChart>
+                </ResponsiveContainer>
+              </div>
+            </div>
+          )}
+
+          {/* Tree visualization */}
+          {gbrtTraining.model && gbrtTraining.model.trees.length > 0 && (
+            <div style={{ ...cardStyle, marginBottom: '24px' }}>
+              <Typography variant="label-md-bold" style={{ marginBottom: '8px' }}>
+                Latest Decision Tree
+              </Typography>
+              <TreeVisualization
+                tree={gbrtTraining.model.trees[gbrtTraining.model.trees.length - 1]}
+                featureNames={gbrtTraining.featureNames}
+                treeIndex={gbrtTraining.model.trees.length - 1}
+              />
             </div>
           )}
 

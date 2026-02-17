@@ -3,6 +3,8 @@
  *
  * Pure-logic module: no React, no DOM. Trains a GBT model on retail data
  * to predict demand (qty) from price, competitor, seasonality and other features.
+ *
+ * Uses histogram-based split finding for fast training on large datasets.
  */
 
 import type { RetailRow } from '../types/data';
@@ -47,7 +49,7 @@ export const DEFAULT_GBRT_CONFIG: GBRTConfig = {
   maxDepth: 5,
   minSamplesLeaf: 20,
   learningRate: 0.1,
-  nTrees: 100,
+  nTrees: 2000,
   subsampleRate: 0.8,
 };
 
@@ -56,13 +58,25 @@ export const FEATURE_NAMES = [
   'comp_1',
   'month',
   'lag_price',
-  'inventory_level',
-  'demand_forecast',
   'holiday',
   'weekday',
   'product_score',
   'freight_price',
+  'category',
+  'discount',
 ];
+
+/**
+ * Deterministic numeric encoding for category strings.
+ * Trees only need distinct values per category — no ordinal meaning required.
+ */
+export function encodeCategory(cat: string): number {
+  let h = 0;
+  for (let i = 0; i < cat.length; i++) {
+    h = Math.imul(31, h) + cat.charCodeAt(i) | 0;
+  }
+  return h >>> 0;
+}
 
 // ---------------------------------------------------------------------------
 // Feature preparation
@@ -91,12 +105,12 @@ export function prepareFeatures(rows: RetailRow[]): PreparedData {
     X[1][i] = r.comp_1;
     X[2][i] = r.month;
     X[3][i] = r.lag_price;
-    X[4][i] = r.inventory_level;
-    X[5][i] = r.demand_forecast;
-    X[6][i] = r.holiday;
-    X[7][i] = r.weekday;
-    X[8][i] = r.product_score;
-    X[9][i] = r.freight_price;
+    X[4][i] = r.holiday;
+    X[5][i] = r.weekday;
+    X[6][i] = r.product_score;
+    X[7][i] = r.freight_price;
+    X[8][i] = encodeCategory(r.product_category_name);
+    X[9][i] = r.discount;
     y[i] = r.qty;
   }
 
@@ -104,18 +118,67 @@ export function prepareFeatures(rows: RetailRow[]): PreparedData {
 }
 
 // ---------------------------------------------------------------------------
-// Tree building
+// Histogram binning (computed once, reused across all trees)
 // ---------------------------------------------------------------------------
 
-interface SplitResult {
-  featureIndex: number;
-  threshold: number;
-  gain: number;
-  leftIndices: Uint32Array;
-  rightIndices: Uint32Array;
+const MAX_HIST_BINS = 64;
+
+interface BinnedFeatures {
+  binIndices: Uint8Array[];   // [nFeatures][nRows] — bin index per sample
+  binEdges: Float64Array[];   // [nFeatures] — threshold values between bins
+  nBins: number[];            // actual bin count per feature
+  maxBins: number;            // max across all features
 }
 
-function meanValue(residuals: Float64Array, indices: Uint32Array | number[], start: number, end: number): number {
+function binFeatures(X: Float64Array[], nRows: number): BinnedFeatures {
+  const nFeatures = X.length;
+  const binIndices: Uint8Array[] = [];
+  const binEdges: Float64Array[] = [];
+  const nBins: number[] = [];
+  let maxBins = 0;
+
+  for (let f = 0; f < nFeatures; f++) {
+    const sorted = Float64Array.from(X[f]).sort();
+
+    // Compute quantile-based bin edges, deduplicating ties
+    const edges: number[] = [];
+    for (let b = 1; b < MAX_HIST_BINS; b++) {
+      const idx = Math.floor(b * nRows / MAX_HIST_BINS);
+      const val = sorted[Math.min(idx, nRows - 1)];
+      if (edges.length === 0 || val !== edges[edges.length - 1]) {
+        edges.push(val);
+      }
+    }
+    const edgesArr = Float64Array.from(edges);
+    binEdges.push(edgesArr);
+    const fBins = edgesArr.length + 1;
+    nBins.push(fBins);
+    if (fBins > maxBins) maxBins = fBins;
+
+    // Assign each sample to a bin via binary search
+    const bins = new Uint8Array(nRows);
+    const nEdges = edgesArr.length;
+    for (let i = 0; i < nRows; i++) {
+      const v = X[f][i];
+      let lo = 0, hi = nEdges;
+      while (lo < hi) {
+        const mid = (lo + hi) >> 1;
+        if (edgesArr[mid] < v) lo = mid + 1;
+        else hi = mid;
+      }
+      bins[i] = lo;
+    }
+    binIndices.push(bins);
+  }
+
+  return { binIndices, binEdges, nBins, maxBins };
+}
+
+// ---------------------------------------------------------------------------
+// Histogram-based tree building
+// ---------------------------------------------------------------------------
+
+function meanValue(residuals: Float64Array, indices: Uint32Array, start: number, end: number): number {
   const n = end - start;
   if (n <= 0) return 0;
   let sum = 0;
@@ -125,116 +188,109 @@ function meanValue(residuals: Float64Array, indices: Uint32Array | number[], sta
   return sum / n;
 }
 
-/**
- * Find the best split for a single feature by scanning sorted values.
- * Uses O(n) scan with pre-sorted indices.
- */
-function findBestSplitForFeature(
-  featureValues: Float64Array,
+function findBestSplitHist(
+  binned: BinnedFeatures,
   residuals: Float64Array,
   indices: Uint32Array,
   start: number,
   end: number,
   minSamplesLeaf: number,
-): { threshold: number; gain: number; splitPos: number } | null {
+  histSum: Float64Array,
+  histCount: Uint32Array,
+): { featureIndex: number; threshold: number; gain: number; splitBin: number } | null {
   const n = end - start;
   if (n < 2 * minSamplesLeaf) return null;
 
-  // Sort the working slice of indices by feature value
-  const slice = indices.slice(start, end);
-  slice.sort((a, b) => featureValues[a] - featureValues[b]);
-  for (let i = start; i < end; i++) {
-    indices[i] = slice[i - start];
-  }
-
-  // Total sum and sum-of-squares for MSE calculation
   let totalSum = 0;
   for (let i = start; i < end; i++) {
     totalSum += residuals[indices[i]];
   }
   const totalMean = totalSum / n;
-  let totalSS = 0;
-  for (let i = start; i < end; i++) {
-    const d = residuals[indices[i]] - totalMean;
-    totalSS += d * d;
-  }
 
-  let leftSum = 0;
   let bestGain = 0;
-  let bestSplitPos = -1;
+  let bestFeature = -1;
+  let bestBin = -1;
   let bestThreshold = 0;
 
-  for (let i = start; i < end - 1; i++) {
-    leftSum += residuals[indices[i]];
-    const leftN = i - start + 1;
-    const rightN = n - leftN;
+  for (let f = 0; f < binned.binIndices.length; f++) {
+    const fBins = binned.binIndices[f];
+    const numBins = binned.nBins[f];
+    const edges = binned.binEdges[f];
 
-    if (leftN < minSamplesLeaf || rightN < minSamplesLeaf) continue;
+    // Clear histogram
+    for (let b = 0; b < numBins; b++) {
+      histSum[b] = 0;
+      histCount[b] = 0;
+    }
 
-    // Skip if same feature value as next (can't split between identical values)
-    if (featureValues[indices[i]] === featureValues[indices[i + 1]]) continue;
+    // Build histogram
+    for (let i = start; i < end; i++) {
+      const idx = indices[i];
+      histSum[fBins[idx]] += residuals[idx];
+      histCount[fBins[idx]]++;
+    }
 
-    const rightSum = totalSum - leftSum;
-    const leftMean = leftSum / leftN;
-    const rightMean = rightSum / rightN;
+    // Scan bins left-to-right to find best split
+    let leftSum = 0;
+    let leftCount = 0;
 
-    // Gain = total_SS - left_SS - right_SS
-    // But we can compute it as: n * totalMean^2 - leftN * leftMean^2 - rightN * rightMean^2
-    // Actually: gain = leftN * leftMean^2 + rightN * rightMean^2 - n * totalMean^2
-    // This is equivalent to the reduction in variance
-    const gain = leftN * leftMean * leftMean + rightN * rightMean * rightMean - n * totalMean * totalMean;
+    for (let b = 0; b < numBins - 1; b++) {
+      leftSum += histSum[b];
+      leftCount += histCount[b];
 
-    if (gain > bestGain) {
-      bestGain = gain;
-      bestSplitPos = i + 1; // split: [start, splitPos) goes left, [splitPos, end) goes right
-      bestThreshold = (featureValues[indices[i]] + featureValues[indices[i + 1]]) / 2;
+      if (leftCount < minSamplesLeaf) continue;
+      const rightCount = n - leftCount;
+      if (rightCount < minSamplesLeaf) break;
+
+      const rightSum = totalSum - leftSum;
+      const leftMean = leftSum / leftCount;
+      const rightMean = rightSum / rightCount;
+
+      const gain = leftCount * leftMean * leftMean
+        + rightCount * rightMean * rightMean
+        - n * totalMean * totalMean;
+
+      if (gain > bestGain) {
+        bestGain = gain;
+        bestFeature = f;
+        bestBin = b;
+        bestThreshold = edges[b];
+      }
     }
   }
 
-  if (bestSplitPos < 0) return null;
-  return { threshold: bestThreshold, gain: bestGain, splitPos: bestSplitPos };
+  if (bestFeature < 0) return null;
+  return { featureIndex: bestFeature, threshold: bestThreshold, gain: bestGain, splitBin: bestBin };
 }
 
-function findBestSplit(
-  X: Float64Array[],
-  residuals: Float64Array,
+/**
+ * In-place partition of indices so that samples with bin <= splitBin come first.
+ * Returns the mid index (start of right partition).
+ */
+function partitionByBin(
+  featureBins: Uint8Array,
+  splitBin: number,
   indices: Uint32Array,
   start: number,
   end: number,
-  minSamplesLeaf: number,
-): SplitResult | null {
-  let bestResult: SplitResult | null = null;
-  let bestGain = 0;
-
-  // We need to try each feature independently, but sorting modifies indices.
-  // Work on a copy for each feature scan.
-  const workingIndices = indices.slice(start, end);
-
-  for (let f = 0; f < X.length; f++) {
-    // Restore the original order for this feature scan
-    const tempIndices = new Uint32Array(indices.buffer, start * 4, end - start);
-    tempIndices.set(workingIndices);
-
-    const result = findBestSplitForFeature(X[f], residuals, indices, start, end, minSamplesLeaf);
-    if (result && result.gain > bestGain) {
-      bestGain = result.gain;
-      const leftIndices = indices.slice(start, start + result.splitPos - start);
-      const rightIndices = indices.slice(start + result.splitPos - start, end);
-      bestResult = {
-        featureIndex: f,
-        threshold: result.threshold,
-        gain: result.gain,
-        leftIndices,
-        rightIndices,
-      };
+): number {
+  let lo = start;
+  let hi = end - 1;
+  while (lo <= hi) {
+    if (featureBins[indices[lo]] <= splitBin) {
+      lo++;
+    } else {
+      const tmp = indices[lo];
+      indices[lo] = indices[hi];
+      indices[hi] = tmp;
+      hi--;
     }
   }
-
-  return bestResult;
+  return lo;
 }
 
-function buildTreeRecursive(
-  X: Float64Array[],
+function buildTreeHist(
+  binned: BinnedFeatures,
   residuals: Float64Array,
   indices: Uint32Array,
   start: number,
@@ -242,42 +298,39 @@ function buildTreeRecursive(
   depth: number,
   config: GBRTConfig,
   importanceAccum: Float64Array,
+  histSum: Float64Array,
+  histCount: Uint32Array,
 ): TreeNode {
   const n = end - start;
   const leafValue = meanValue(residuals, indices, start, end);
 
-  // Leaf conditions
   if (depth >= config.maxDepth || n < 2 * config.minSamplesLeaf) {
     return { featureIndex: -1, threshold: 0, left: null, right: null, value: leafValue, gain: 0 };
   }
 
-  const split = findBestSplit(X, residuals, indices, start, end, config.minSamplesLeaf);
+  const split = findBestSplitHist(binned, residuals, indices, start, end, config.minSamplesLeaf, histSum, histCount);
   if (!split || split.gain <= 0) {
     return { featureIndex: -1, threshold: 0, left: null, right: null, value: leafValue, gain: 0 };
   }
 
-  // Accumulate feature importance
   importanceAccum[split.featureIndex] += split.gain;
 
-  // Rebuild indices: left portion first, right portion second
-  const combined = new Uint32Array(n);
-  combined.set(split.leftIndices, 0);
-  combined.set(split.rightIndices, split.leftIndices.length);
-  for (let i = 0; i < n; i++) {
-    indices[start + i] = combined[i];
+  const mid = partitionByBin(binned.binIndices[split.featureIndex], split.splitBin, indices, start, end);
+
+  // Guard against degenerate splits
+  if (mid === start || mid === end) {
+    return { featureIndex: -1, threshold: 0, left: null, right: null, value: leafValue, gain: 0 };
   }
 
-  const mid = start + split.leftIndices.length;
-
-  const left = buildTreeRecursive(X, residuals, indices, start, mid, depth + 1, config, importanceAccum);
-  const right = buildTreeRecursive(X, residuals, indices, mid, end, depth + 1, config, importanceAccum);
+  const left = buildTreeHist(binned, residuals, indices, start, mid, depth + 1, config, importanceAccum, histSum, histCount);
+  const right = buildTreeHist(binned, residuals, indices, mid, end, depth + 1, config, importanceAccum, histSum, histCount);
 
   return {
     featureIndex: split.featureIndex,
     threshold: split.threshold,
     left,
     right,
-    value: leafValue, // internal node also stores mean (not strictly needed)
+    value: leafValue,
     gain: split.gain,
   };
 }
@@ -313,12 +366,12 @@ export function predictRow(model: GBRTModel, row: RetailRow, overridePrice?: num
     row.comp_1,
     row.month,
     row.lag_price,
-    row.inventory_level,
-    row.demand_forecast,
     row.holiday,
     row.weekday,
     row.product_score,
     row.freight_price,
+    encodeCategory(row.product_category_name),
+    row.discount,
   ];
   return predictModel(model, features);
 }
@@ -336,10 +389,16 @@ export interface TrainingContext {
   config: GBRTConfig;
   model: GBRTModel;
   nRows: number;
+  binned: BinnedFeatures;
+  histSum: Float64Array;
+  histCount: Uint32Array;
 }
 
 export function initTraining(data: PreparedData, config: GBRTConfig = DEFAULT_GBRT_CONFIG): TrainingContext {
   const { X, y, nRows } = data;
+
+  // Pre-bin features (one-time cost)
+  const binned = binFeatures(X, nRows);
 
   // Intercept = mean(y)
   let sum = 0;
@@ -370,6 +429,9 @@ export function initTraining(data: PreparedData, config: GBRTConfig = DEFAULT_GB
     config,
     model,
     nRows,
+    binned,
+    histSum: new Float64Array(binned.maxBins),
+    histCount: new Uint32Array(binned.maxBins),
   };
 }
 
@@ -398,12 +460,13 @@ export function trainOneTree(ctx: TrainingContext, treeIndex: number): GBRTSnaps
     for (let i = 0; i < sampleSize; i++) indices[i] = all[i];
   }
 
-  // Build tree
-  const tree = buildTreeRecursive(
-    X, residuals, indices, 0, sampleSize, 0, config, ctx.featureImportance,
+  // Build tree using histogram-based splitting
+  const tree = buildTreeHist(
+    ctx.binned, residuals, indices, 0, sampleSize, 0, config,
+    ctx.featureImportance, ctx.histSum, ctx.histCount,
   );
 
-  // Update predictions and residuals for ALL rows (not just the subsample)
+  // Update predictions and residuals for ALL rows
   const featureVec = new Float64Array(X.length);
   for (let i = 0; i < nRows; i++) {
     for (let f = 0; f < X.length; f++) featureVec[f] = X[f][i];
@@ -474,14 +537,15 @@ export function generateDemandCurve(
     avgFeatures[1] += r.comp_1;
     avgFeatures[2] += r.month;
     avgFeatures[3] += r.lag_price;
-    avgFeatures[4] += r.inventory_level;
-    avgFeatures[5] += r.demand_forecast;
-    avgFeatures[6] += r.holiday;
-    avgFeatures[7] += r.weekday;
-    avgFeatures[8] += r.product_score;
-    avgFeatures[9] += r.freight_price;
+    avgFeatures[4] += r.holiday;
+    avgFeatures[5] += r.weekday;
+    avgFeatures[6] += r.product_score;
+    avgFeatures[7] += r.freight_price;
+    avgFeatures[9] += r.discount;
   }
   for (let f = 0; f < avgFeatures.length; f++) avgFeatures[f] /= n;
+  // Category is not averaged — use the first row's category (all rows should be same product)
+  avgFeatures[8] = encodeCategory(rows[0].product_category_name);
 
   const basePrice = avgFeatures[0];
   const points: DemandCurvePoint[] = [];
