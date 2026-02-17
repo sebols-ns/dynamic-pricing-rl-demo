@@ -1,0 +1,61 @@
+# DQN Configuration for Dynamic Pricing
+# All hyperparameters for training and evaluation
+
+training:
+  episodes: 15000
+  steps_per_episode: 200
+  batch_size: 64
+  learning_rate: 0.0001
+  gamma: 0.0  # Contextual bandit: pricing decisions are independent
+  tau: 0.005  # Soft update rate for target network
+  epsilon_start: 1.0
+  epsilon_end: 0.01
+  epsilon_decay: 0.995
+  warmup_steps: 1000  # Fill buffer before training
+  train_frequency: 4  # Train every N steps
+  gradient_clip_max_norm: 10.0
+  weight_decay: 0.00001
+
+network:
+  hidden_dims: [128, 128, 64]
+  use_batch_norm: true
+  dropout_rate: 0.0  # Set to 0.1 if overfitting occurs
+
+replay:
+  buffer_size: 100000
+  use_per: true  # Prioritized Experience Replay
+  per_alpha: 0.6  # Priority exponent
+  per_beta_start: 0.4  # Importance sampling weight
+  per_beta_end: 1.0
+  per_beta_frames: 100000  # Frames to anneal beta to 1.0
+
+environment:
+  reward_weights:
+    revenue: 0.4
+    margin: 0.4
+    volume: 0.2
+  synthetic_ratio: 0.3  # 30% synthetic steps for state coverage
+  price_change_penalty: 0.15
+
+early_stopping:
+  patience: 800  # Episodes without improvement
+  min_delta: 0.001  # Minimum improvement threshold
+  window_size: 50  # Rolling average window
+
+logging:
+  log_interval: 10  # Log every N episodes
+  tensorboard_dir: "runs"
+  checkpoint_dir: "checkpoints"
+
+# Action space: 12 price multipliers
+actions:
+  multipliers: [0.80, 0.90, 0.95, 1.00, 1.05, 1.10, 1.15, 1.20, 1.30, 1.40, 1.50, 1.60]
+
+# State discretization (for comparison with Q-learning)
+discretization:
+  demand_bins: 3
+  competitor_bins: 3
+  season_bins: 4
+  lag_price_bins: 3
+  inventory_bins: 3
+  forecast_bins: 3
