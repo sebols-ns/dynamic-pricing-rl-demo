@@ -59,9 +59,9 @@ export function DemandModel({ gbrtTraining, onComplete }: DemandModelProps) {
   const { mode, setMode } = useDemandModel();
   const [selectedProduct, setSelectedProduct] = useState('');
   const [speed, setSpeed] = useState(10);
-  const [showTransition, setShowTransition] = useState(false);
   const [pdpSweep, setPdpSweep] = useState('unit_price');
   const [pdpCondition, setPdpCondition] = useState('none');
+  const [showOverfitExplainer, setShowOverfitExplainer] = useState(false);
 
   const isStoreInventory = datasetName === 'store_inventory';
   const gbtAvailable = !isStoreInventory;
@@ -91,10 +91,16 @@ export function DemandModel({ gbrtTraining, onComplete }: DemandModelProps) {
     }
   }, [isLoaded, products, selectedProduct]);
 
+  // Simple mode auto-completes immediately
+  useEffect(() => {
+    if (mode === 'simple') {
+      onComplete?.();
+    }
+  }, [mode, onComplete]);
+
   // Combined demand curve: GBT predictions + log-linear overlay for comparison
   const comparisonCurveData = useMemo(() => {
     if (!gbrtTraining.demandCurveData.length || rows.length === 0) return [];
-    // Compute log-linear curve using same price range
     const basePrice = mean(rows.map(r => r.unit_price));
     const baseQty = mean(rows.map(r => r.qty));
     const elasticity = 0.7;
@@ -163,18 +169,6 @@ export function DemandModel({ gbrtTraining, onComplete }: DemandModelProps) {
     });
   }, [pdpData]);
 
-  // Trigger completion callback
-  useEffect(() => {
-    if (gbrtTraining.isComplete && mode === 'advanced') {
-      setShowTransition(true);
-      const timer = setTimeout(() => {
-        setShowTransition(false);
-        onComplete?.();
-      }, 2000);
-      return () => clearTimeout(timer);
-    }
-  }, [gbrtTraining.isComplete, mode, onComplete]);
-
   const progress = gbrtTraining.totalTrees > 0
     ? Math.round((gbrtTraining.currentTree / gbrtTraining.totalTrees) * 100)
     : 0;
@@ -201,7 +195,7 @@ export function DemandModel({ gbrtTraining, onComplete }: DemandModelProps) {
       <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '24px' }}>
         <div style={{ display: 'flex', gap: '0' }}>
           <button
-            onClick={() => setMode('simple')}
+            onClick={() => { setMode('simple'); setShowOverfitExplainer(false); }}
             style={{
               padding: '10px 24px',
               borderRadius: gbtAvailable ? '8px 0 0 8px' : '8px',
@@ -326,7 +320,7 @@ export function DemandModel({ gbrtTraining, onComplete }: DemandModelProps) {
               ) : (
                 <Button onClick={gbrtTraining.pause} variant="outline">Pause</Button>
               )}
-              <Button onClick={gbrtTraining.reset} variant="ghost">
+              <Button onClick={() => { gbrtTraining.reset(); setShowOverfitExplainer(false); }} variant="ghost">
                 Reset
               </Button>
             </div>
@@ -344,22 +338,36 @@ export function DemandModel({ gbrtTraining, onComplete }: DemandModelProps) {
             </div>
 
             <div className="flex flex-wrap" style={{ gap: '6px' }}>
-              {gbrtTraining.isComplete ? (
-                <>
-                  <Badge variant="success">
-                    {gbrtTraining.earlyStopped
-                      ? `Early stopped at tree ${gbrtTraining.currentTree}`
-                      : 'Complete'}
-                  </Badge>
-                  <Badge variant="primary">Best Test R² = {gbrtTraining.bestTestR2.toFixed(3)} (tree {gbrtTraining.bestTestTree})</Badge>
-                  <Badge variant="neutral">Train R² = {gbrtTraining.trainR2.toFixed(3)}</Badge>
-                </>
-              ) : gbrtTraining.currentTree > 0 ? (
+              {gbrtTraining.earlyStopped ? (
+                <button
+                  onClick={() => setShowOverfitExplainer(v => !v)}
+                  style={{
+                    padding: '4px 14px',
+                    borderRadius: '9999px',
+                    border: 'none',
+                    fontSize: '13px',
+                    fontWeight: 600,
+                    backgroundColor: '#fbbf24',
+                    color: '#78350f',
+                    cursor: 'pointer',
+                    transition: 'all 0.15s',
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '6px',
+                  }}
+                >
+                  Early stopped at tree {gbrtTraining.currentTree}
+                  <span style={{ fontSize: '11px' }}>{showOverfitExplainer ? '▲' : '▼'}</span>
+                </button>
+              ) : gbrtTraining.isComplete ? (
+                <Badge variant="success">Complete</Badge>
+              ) : null}
+              {gbrtTraining.currentTree > 0 && (
                 <>
                   <Badge variant="primary">Test R² = {gbrtTraining.testR2.toFixed(3)}</Badge>
                   <Badge variant="neutral">Train R² = {gbrtTraining.trainR2.toFixed(3)}</Badge>
                 </>
-              ) : null}
+              )}
             </div>
           </div>
 
@@ -383,7 +391,7 @@ export function DemandModel({ gbrtTraining, onComplete }: DemandModelProps) {
                     width: `${progress}%`,
                     height: '100%',
                     borderRadius: '3px',
-                    backgroundColor: gbrtTraining.isComplete ? 'var(--color-success)' : 'var(--color-interactive)',
+                    backgroundColor: gbrtTraining.earlyStopped ? '#fbbf24' : gbrtTraining.isComplete ? 'var(--color-success)' : 'var(--color-interactive)',
                     transition: 'width 0.3s ease',
                   }}
                 />
@@ -391,25 +399,109 @@ export function DemandModel({ gbrtTraining, onComplete }: DemandModelProps) {
             </div>
           )}
 
-          {/* Transition message */}
-          {showTransition && (
+          {/* Overfitting explainer — shown when early stopped button is clicked */}
+          {showOverfitExplainer && gbrtTraining.earlyStopped && (
             <div style={{
               ...cardStyle,
-              backgroundColor: 'var(--color-success-subtle)',
-              borderColor: 'var(--color-green-200)',
-              textAlign: 'center',
-              padding: '24px',
+              borderColor: '#fbbf24',
+              borderWidth: '2px',
               marginBottom: '24px',
+              padding: '28px',
             }}>
-              <Typography variant="heading-sm">Demand model ready</Typography>
-              <Typography variant="body-sm" style={{ color: 'var(--color-secondary)', marginTop: '4px' }}>
-                Now training pricing agent with the learned demand model...
+              <Typography variant="heading-sm" style={{ marginBottom: '12px' }}>
+                Why did training stop?
               </Typography>
+              <Typography variant="body-sm" style={{ color: 'var(--color-secondary)', marginBottom: '16px' }}>
+                The model <strong>overfit</strong> — it memorised the training data instead of learning generalisable
+                patterns. You can see this in the chart below: training accuracy (grey) keeps climbing while
+                test accuracy (green) peaks early and then declines. The model is fitting noise, not signal.
+              </Typography>
+
+              {/* Inline R² chart */}
+              <div style={{ marginBottom: '20px' }}>
+                <ResponsiveContainer width="100%" height={220}>
+                  <LineChart data={gbrtTraining.r2History} margin={{ top: 8, right: 16, left: 8, bottom: 24 }}>
+                    <CartesianGrid strokeDasharray="3 3" stroke="var(--color-neutral-200)" />
+                    <XAxis dataKey="tree" tick={{ fontSize: 11 }} label={{ value: 'Trees', position: 'insideBottom', offset: -12, fontSize: 12 }} />
+                    <YAxis
+                      tick={{ fontSize: 11 }}
+                      domain={['auto', 'auto']}
+                      tickFormatter={(v: number) => v.toFixed(2)}
+                      label={{ value: 'R²', angle: -90, position: 'insideLeft', offset: 4, fontSize: 12 }}
+                    />
+                    <RechartsTooltip formatter={((v: number) => v.toFixed(4)) as any} />
+                    <Legend verticalAlign="top" height={28} wrapperStyle={{ fontSize: '12px' }} />
+                    <Line type="monotone" dataKey="train" name="Train R²" stroke="var(--color-neutral-400)" strokeWidth={1.5} dot={false} isAnimationActive={false} />
+                    <Line type="monotone" dataKey="test" name="Test R²" stroke="var(--color-success)" strokeWidth={2} dot={false} isAnimationActive={false} />
+                  </LineChart>
+                </ResponsiveContainer>
+              </div>
+
+              <Typography variant="heading-xs" style={{ marginBottom: '8px' }}>
+                This is a data problem, not a model problem
+              </Typography>
+              <Typography variant="body-sm" style={{ color: 'var(--color-secondary)', marginBottom: '12px' }}>
+                With only <strong>{rows.length} rows</strong>, there isn't enough data for a machine learning model to learn
+                demand patterns that generalise to unseen conditions. The model has more capacity than the data can
+                support — it finds patterns in the training set that are just noise.
+              </Typography>
+              <Typography variant="body-sm" style={{ color: 'var(--color-secondary)', marginBottom: '16px' }}>
+                This is exactly why the <strong>data integration layer matters</strong>. With 600 rows, the fancy model
+                can't help you. With 60,000 rows from a live data pipeline — connecting transactional feeds, competitor
+                price scrapes, and market signals — the same GBT model would learn robust, generalisable demand curves
+                that a hand-coded formula could never match.
+              </Typography>
+
+              <div style={{
+                display: 'grid',
+                gridTemplateColumns: '1fr 1fr',
+                gap: '12px',
+                marginBottom: '20px',
+              }}>
+                <div style={{
+                  padding: '14px',
+                  borderRadius: '8px',
+                  backgroundColor: 'var(--color-gray)',
+                  textAlign: 'center',
+                }}>
+                  <Typography variant="heading-lg" style={{ marginBottom: '4px' }}>{rows.length}</Typography>
+                  <Typography variant="body-xs" style={{ color: 'var(--color-secondary)' }}>
+                    rows in this dataset
+                  </Typography>
+                  <Typography variant="body-xs" style={{ color: '#dc2626', fontWeight: 600, marginTop: '4px' }}>
+                    Not enough for ML
+                  </Typography>
+                </div>
+                <div style={{
+                  padding: '14px',
+                  borderRadius: '8px',
+                  backgroundColor: 'var(--color-gray)',
+                  textAlign: 'center',
+                }}>
+                  <Typography variant="heading-lg" style={{ marginBottom: '4px' }}>60,000+</Typography>
+                  <Typography variant="body-xs" style={{ color: 'var(--color-secondary)' }}>
+                    rows from a live pipeline
+                  </Typography>
+                  <Typography variant="body-xs" style={{ color: '#059669', fontWeight: 600, marginTop: '4px' }}>
+                    GBT shines here
+                  </Typography>
+                </div>
+              </div>
+
+              <Typography variant="body-sm" style={{ color: 'var(--color-secondary)', marginBottom: '16px' }}>
+                For this demo, the <strong>log-linear model</strong> is the right choice — it doesn't need to learn from
+                data because the elasticity formula is hand-coded. It works well on any dataset size and gives the RL
+                agent a reasonable environment to train against.
+              </Typography>
+
+              <Button onClick={() => { setMode('simple'); setShowOverfitExplainer(false); }}>
+                Use Log-Linear Model Instead
+              </Button>
             </div>
           )}
 
           {/* Charts: 2-column grid */}
-          {gbrtTraining.currentTree > 0 && (
+          {gbrtTraining.currentTree > 0 && !showOverfitExplainer && (
             <div style={{
               display: 'grid',
               gridTemplateColumns: 'repeat(auto-fit, minmax(400px, 1fr))',
@@ -557,7 +649,7 @@ export function DemandModel({ gbrtTraining, onComplete }: DemandModelProps) {
           )}
 
           {/* Tree visualization */}
-          {gbrtTraining.model && gbrtTraining.model.trees.length > 0 && (
+          {gbrtTraining.model && gbrtTraining.model.trees.length > 0 && !showOverfitExplainer && (
             <div style={{ ...cardStyle, marginBottom: '24px' }}>
               <Typography variant="label-md-bold" style={{ marginBottom: '8px' }}>
                 Latest Decision Tree
@@ -571,7 +663,7 @@ export function DemandModel({ gbrtTraining, onComplete }: DemandModelProps) {
           )}
 
           {/* Feature importance (full width) */}
-          {featureImportanceData.length > 0 && (
+          {featureImportanceData.length > 0 && !showOverfitExplainer && (
             <div style={cardStyle}>
               <Typography variant="label-md-bold" style={{ marginBottom: '12px' }}>
                 Feature Importance (Split Gain)
