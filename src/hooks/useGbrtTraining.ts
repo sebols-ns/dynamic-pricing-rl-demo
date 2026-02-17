@@ -34,7 +34,7 @@ interface GbrtTrainingState {
 }
 
 const UI_UPDATE_INTERVAL_MS = 80;
-const EARLY_STOP_PATIENCE = 1000; // stop if test R² hasn't improved for this many trees
+const EARLY_STOP_PATIENCE = 300; // stop if test R² hasn't improved for this many trees
 
 export function useGbrtTraining() {
   const [state, setState] = useState<GbrtTrainingState>({
