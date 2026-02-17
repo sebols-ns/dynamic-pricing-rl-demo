@@ -124,8 +124,7 @@ export function Learn({ onNavigate }: LearnProps) {
         <Typography variant="body-sm">
           Additional columns include product dimensions (<code style={{ background: 'var(--color-gray)', padding: '1px 4px', borderRadius: '3px' }}>product_weight_g</code>,
           <code style={{ background: 'var(--color-gray)', padding: '1px 4px', borderRadius: '3px' }}> volume</code>),
-          time features (<code style={{ background: 'var(--color-gray)', padding: '1px 4px', borderRadius: '3px' }}>weekday</code>,
-          <code style={{ background: 'var(--color-gray)', padding: '1px 4px', borderRadius: '3px' }}> weekend</code>,
+          time features (<code style={{ background: 'var(--color-gray)', padding: '1px 4px', borderRadius: '3px' }}>weekend</code>,
           <code style={{ background: 'var(--color-gray)', padding: '1px 4px', borderRadius: '3px' }}> holiday</code>),
           and competitor product scores (<code style={{ background: 'var(--color-gray)', padding: '1px 4px', borderRadius: '3px' }}>ps1/ps2/ps3</code>).
         </Typography>
@@ -263,7 +262,6 @@ export function Learn({ onNavigate }: LearnProps) {
             ['month', 'Month of year — captures seasonality'],
             ['lag_price', 'Previous period price — price momentum'],
             ['holiday', 'Binary holiday flag — demand spikes'],
-            ['weekday', 'Day of week — weekly demand patterns'],
             ['product_score', 'Customer review score — quality signal'],
             ['freight_price', 'Shipping cost — cost proxy'],
             ['category', 'Product category (hash-encoded) — category-level demand'],

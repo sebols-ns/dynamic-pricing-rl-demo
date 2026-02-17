@@ -34,7 +34,6 @@ const FEATURE_LABELS: Record<string, string> = {
   month: 'Month',
   lag_price: 'Lag Price',
   holiday: 'Holiday',
-  weekday: 'Weekday',
   product_score: 'Product Score',
   freight_price: 'Freight',
   discount: 'Discount',

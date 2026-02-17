@@ -310,7 +310,7 @@ export function DataExplorer() {
             <strong>Kaggle Retail Price Optimization</strong> — Monthly product-level data from a Brazilian
             e-commerce platform. Each row captures demand (<code>qty</code>), pricing (<code>unit_price</code>),
             shipping cost (<code>freight_price</code>), competitor prices (<code>comp_1/2/3</code>),
-            historical price (<code>lag_price</code>), and time features (<code>month</code>, <code>weekday/weekend/holiday</code>).
+            historical price (<code>lag_price</code>), and time features (<code>month</code>, <code>weekend/holiday</code>).
             The RL agent uses these to learn state-dependent pricing strategies.
           </Typography>
         )}

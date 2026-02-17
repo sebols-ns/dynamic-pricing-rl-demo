@@ -62,7 +62,6 @@ export const FEATURE_NAMES = [
   'month',
   'lag_price',
   'holiday',
-  'weekday',
   'product_score',
   'freight_price',
   'category',
@@ -109,11 +108,10 @@ export function prepareFeatures(rows: RetailRow[]): PreparedData {
     X[2][i] = r.month;
     X[3][i] = r.lag_price;
     X[4][i] = r.holiday;
-    X[5][i] = r.weekday;
-    X[6][i] = r.product_score;
-    X[7][i] = r.freight_price;
-    X[8][i] = encodeCategory(r.product_category_name);
-    X[9][i] = r.discount;
+    X[5][i] = r.product_score;
+    X[6][i] = r.freight_price;
+    X[7][i] = encodeCategory(r.product_category_name);
+    X[8][i] = r.discount;
     y[i] = r.qty;
   }
 
@@ -373,7 +371,6 @@ export function predictRow(model: GBRTModel, row: RetailRow, overridePrice?: num
     row.month,
     row.lag_price,
     row.holiday,
-    row.weekday,
     row.product_score,
     row.freight_price,
     encodeCategory(row.product_category_name),
@@ -624,7 +621,7 @@ export function generatePDP(
   // Build feature matrix for averages
   const featureVals = (r: RetailRow): number[] => [
     r.unit_price, r.comp_1, r.month, r.lag_price,
-    r.holiday, r.weekday, r.product_score, r.freight_price,
+    r.holiday, r.product_score, r.freight_price,
     encodeCategory(r.product_category_name), r.discount,
   ];
 
@@ -711,14 +708,13 @@ export function generateDemandCurve(
     avgFeatures[2] += r.month;
     avgFeatures[3] += r.lag_price;
     avgFeatures[4] += r.holiday;
-    avgFeatures[5] += r.weekday;
-    avgFeatures[6] += r.product_score;
-    avgFeatures[7] += r.freight_price;
-    avgFeatures[9] += r.discount;
+    avgFeatures[5] += r.product_score;
+    avgFeatures[6] += r.freight_price;
+    avgFeatures[8] += r.discount;
   }
   for (let f = 0; f < avgFeatures.length; f++) avgFeatures[f] /= n;
   // Category is not averaged — use the first row's category (all rows should be same product)
-  avgFeatures[8] = encodeCategory(rows[0].product_category_name);
+  avgFeatures[7] = encodeCategory(rows[0].product_category_name);
 
   const basePrice = avgFeatures[0];
   const points: DemandCurvePoint[] = [];

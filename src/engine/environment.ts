@@ -183,7 +183,6 @@ export class PricingEnvironment {
       row.month,
       row.lag_price,
       row.holiday,
-      row.weekday,
       row.product_score,
       row.freight_price,
       encodeCategory(row.product_category_name),
