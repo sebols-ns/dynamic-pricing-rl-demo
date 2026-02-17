@@ -36,6 +36,7 @@ export interface GBRTConfig {
   learningRate: number;
   nTrees: number;
   subsampleRate: number;
+  lambda: number; // L2 regularization on leaf values (XGBoost-style)
 }
 
 export interface GBRTSnapshot {
@@ -52,6 +53,7 @@ export const DEFAULT_GBRT_CONFIG: GBRTConfig = {
   learningRate: 0.05,
   nTrees: 2000,
   subsampleRate: 0.8,
+  lambda: 10,  // L2 regularization — shrinks leaf values, critical for small datasets
 };
 
 export const FEATURE_NAMES = [
@@ -179,14 +181,15 @@ function binFeatures(X: Float64Array[], nRows: number): BinnedFeatures {
 // Histogram-based tree building
 // ---------------------------------------------------------------------------
 
-function meanValue(residuals: Float64Array, indices: Uint32Array, start: number, end: number): number {
+/** Regularized leaf value: sum(residuals) / (count + lambda) */
+function leafValue(residuals: Float64Array, indices: Uint32Array, start: number, end: number, lambda: number): number {
   const n = end - start;
   if (n <= 0) return 0;
   let sum = 0;
   for (let i = start; i < end; i++) {
     sum += residuals[indices[i]];
   }
-  return sum / n;
+  return sum / (n + lambda);
 }
 
 function findBestSplitHist(
@@ -196,6 +199,7 @@ function findBestSplitHist(
   start: number,
   end: number,
   minSamplesLeaf: number,
+  lambda: number,
   histSum: Float64Array,
   histCount: Uint32Array,
 ): { featureIndex: number; threshold: number; gain: number; splitBin: number } | null {
@@ -206,7 +210,9 @@ function findBestSplitHist(
   for (let i = start; i < end; i++) {
     totalSum += residuals[indices[i]];
   }
-  const totalMean = totalSum / n;
+
+  // XGBoost-style regularized gain: sum² / (count + lambda)
+  const parentScore = (totalSum * totalSum) / (n + lambda);
 
   let bestGain = 0;
   let bestFeature = -1;
@@ -244,12 +250,11 @@ function findBestSplitHist(
       if (rightCount < minSamplesLeaf) break;
 
       const rightSum = totalSum - leftSum;
-      const leftMean = leftSum / leftCount;
-      const rightMean = rightSum / rightCount;
 
-      const gain = leftCount * leftMean * leftMean
-        + rightCount * rightMean * rightMean
-        - n * totalMean * totalMean;
+      // Regularized gain: left_score + right_score - parent_score
+      const gain = (leftSum * leftSum) / (leftCount + lambda)
+        + (rightSum * rightSum) / (rightCount + lambda)
+        - parentScore;
 
       if (gain > bestGain) {
         bestGain = gain;
@@ -303,15 +308,15 @@ function buildTreeHist(
   histCount: Uint32Array,
 ): TreeNode {
   const n = end - start;
-  const leafValue = meanValue(residuals, indices, start, end);
+  const lv = leafValue(residuals, indices, start, end, config.lambda);
 
   if (depth >= config.maxDepth || n < 2 * config.minSamplesLeaf) {
-    return { featureIndex: -1, threshold: 0, left: null, right: null, value: leafValue, gain: 0 };
+    return { featureIndex: -1, threshold: 0, left: null, right: null, value: lv, gain: 0 };
   }
 
-  const split = findBestSplitHist(binned, residuals, indices, start, end, config.minSamplesLeaf, histSum, histCount);
+  const split = findBestSplitHist(binned, residuals, indices, start, end, config.minSamplesLeaf, config.lambda, histSum, histCount);
   if (!split || split.gain <= 0) {
-    return { featureIndex: -1, threshold: 0, left: null, right: null, value: leafValue, gain: 0 };
+    return { featureIndex: -1, threshold: 0, left: null, right: null, value: lv, gain: 0 };
   }
 
   importanceAccum[split.featureIndex] += split.gain;
@@ -320,7 +325,7 @@ function buildTreeHist(
 
   // Guard against degenerate splits
   if (mid === start || mid === end) {
-    return { featureIndex: -1, threshold: 0, left: null, right: null, value: leafValue, gain: 0 };
+    return { featureIndex: -1, threshold: 0, left: null, right: null, value: lv, gain: 0 };
   }
 
   const left = buildTreeHist(binned, residuals, indices, start, mid, depth + 1, config, importanceAccum, histSum, histCount);
@@ -331,7 +336,7 @@ function buildTreeHist(
     threshold: split.threshold,
     left,
     right,
-    value: leafValue,
+    value: lv,
     gain: split.gain,
   };
 }
