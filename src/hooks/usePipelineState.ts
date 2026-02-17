@@ -1,4 +1,4 @@
-import { useState, useCallback, useMemo } from 'react';
+import { useState, useCallback } from 'react';
 
 export const PIPELINE_STEPS = ['data', 'demand-model', 'training', 'results', 'explainability'] as const;
 export type PipelineStep = typeof PIPELINE_STEPS[number];

@@ -334,7 +334,7 @@ export function DemandModel({ gbrtTraining, onComplete }: DemandModelProps) {
                   <Typography variant="label-md-bold">Learned Demand Curve</Typography>
                   {products.length > 0 && (
                     <Select value={selectedProduct} onValueChange={setSelectedProduct}>
-                      <SelectTrigger width="fit">
+                      <SelectTrigger width="compact">
                         <SelectValue placeholder="Product" />
                       </SelectTrigger>
                       <SelectContent>

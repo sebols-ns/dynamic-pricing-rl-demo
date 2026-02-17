@@ -115,22 +115,6 @@ interface SplitResult {
   rightIndices: Uint32Array;
 }
 
-function weightedVariance(residuals: Float64Array, indices: Uint32Array, start: number, end: number): number {
-  const n = end - start;
-  if (n <= 0) return 0;
-  let sum = 0;
-  for (let i = start; i < end; i++) {
-    sum += residuals[indices[i]];
-  }
-  const mean = sum / n;
-  let variance = 0;
-  for (let i = start; i < end; i++) {
-    const d = residuals[indices[i]] - mean;
-    variance += d * d;
-  }
-  return variance;
-}
-
 function meanValue(residuals: Float64Array, indices: Uint32Array | number[], start: number, end: number): number {
   const n = end - start;
   if (n <= 0) return 0;

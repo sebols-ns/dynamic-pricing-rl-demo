@@ -1,5 +1,4 @@
 import { useState } from 'react';
-import { Typography } from '@northslopetech/altitude-ui';
 import { PricingLab } from './PricingLab';
 import { Backtesting } from './Backtesting';
 
