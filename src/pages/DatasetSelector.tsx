@@ -64,7 +64,7 @@ export function DatasetSelector({ onSelected }: DatasetSelectorProps) {
             Rich feature set ideal for learning price-demand relationships.
           </Typography>
           <div className="flex flex-wrap" style={{ gap: '6px', marginBottom: '12px' }}>
-            <Badge variant="neutral">~480 rows</Badge>
+            <Badge variant="neutral">~600 rows</Badge>
             <Badge variant="neutral">30+ features</Badge>
             <Badge variant="neutral">5 products</Badge>
           </div>
