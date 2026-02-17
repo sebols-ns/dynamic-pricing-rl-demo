@@ -23,27 +23,28 @@ import { compareMonthYear } from '../utils/math';
 
 const columnHelper = createColumnHelper<RetailRow>();
 
+const fmtDollar = (info: { getValue: () => number }) => `$${info.getValue().toFixed(2)}`;
+const fmtNum = (info: { getValue: () => number }) => info.getValue().toFixed(1);
+
 const columns = [
   columnHelper.accessor('product_id', { header: 'Product ID' }),
   columnHelper.accessor('product_category_name', { header: 'Category' }),
-  columnHelper.accessor('unit_price', {
-    header: 'Unit Price',
-    cell: info => `$${info.getValue().toFixed(2)}`,
-  }),
-  columnHelper.accessor('qty', { header: 'Quantity' }),
-  columnHelper.accessor('total_price', {
-    header: 'Total Price',
-    cell: info => `$${info.getValue().toFixed(2)}`,
-  }),
-  columnHelper.accessor('comp_1', {
-    header: 'Competitor',
-    cell: info => `$${info.getValue().toFixed(2)}`,
-  }),
-  columnHelper.accessor('lag_price', {
-    header: 'Lag Price',
-    cell: info => `$${info.getValue().toFixed(2)}`,
-  }),
   columnHelper.accessor('month_year', { header: 'Date' }),
+  columnHelper.accessor('unit_price', { header: 'Unit Price', cell: fmtDollar }),
+  columnHelper.accessor('qty', { header: 'Qty' }),
+  columnHelper.accessor('total_price', { header: 'Total Price', cell: fmtDollar }),
+  columnHelper.accessor('freight_price', { header: 'Freight', cell: fmtDollar }),
+  columnHelper.accessor('comp_1', { header: 'Comp 1', cell: fmtDollar }),
+  columnHelper.accessor('comp_2', { header: 'Comp 2', cell: fmtDollar }),
+  columnHelper.accessor('comp_3', { header: 'Comp 3', cell: fmtDollar }),
+  columnHelper.accessor('lag_price', { header: 'Lag Price', cell: fmtDollar }),
+  columnHelper.accessor('product_score', { header: 'Score', cell: fmtNum }),
+  columnHelper.accessor('discount', { header: 'Discount', cell: fmtNum }),
+  columnHelper.accessor('holiday', { header: 'Holiday' }),
+  columnHelper.accessor('weekend', { header: 'Weekend' }),
+  columnHelper.accessor('month', { header: 'Month' }),
+  columnHelper.accessor('customers', { header: 'Customers' }),
+  columnHelper.accessor('volume', { header: 'Volume', cell: fmtNum }),
 ];
 
 export function DataExplorer() {
@@ -395,7 +396,9 @@ export function DataExplorer() {
           Showing {tableRows.length.toLocaleString()} rows
         </Typography>
       </div>
-      <Table table={table} showPagination />
+      <div style={{ overflowX: 'auto' }}>
+        <Table table={table} showPagination />
+      </div>
     </div>
   );
 }
