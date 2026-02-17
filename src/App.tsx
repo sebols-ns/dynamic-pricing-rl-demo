@@ -9,7 +9,7 @@ import { useRlTraining } from './hooks/useRlTraining';
 import { useGbrtTraining } from './hooks/useGbrtTraining';
 import { usePipelineState, type PipelineStep } from './hooks/usePipelineState';
 import { PipelineStepper } from './components/PipelineStepper';
-import { LearnPanel } from './components/LearnPanel';
+import { Learn } from './pages/Learn';
 import { DatasetSelector } from './pages/DatasetSelector';
 import { DataExplorer } from './pages/DataExplorer';
 import { DemandModel } from './pages/DemandModel';
@@ -368,15 +368,12 @@ function App() {
 
               {/* Main content */}
               <main style={{ maxWidth: '1280px', margin: '0 auto', padding: '0 32px' }}>
-                {renderActiveStep()}
+                {learnOpen ? (
+                  <Learn onNavigate={(step) => { handleLearnNavigate(step); setLearnOpen(false); }} />
+                ) : (
+                  renderActiveStep()
+                )}
               </main>
-
-              {/* Learn panel */}
-              <LearnPanel
-                isOpen={learnOpen}
-                onClose={() => setLearnOpen(false)}
-                onNavigate={handleLearnNavigate}
-              />
             </div>
           </TrainedAgentContext.Provider>
         </DemandModelContext.Provider>

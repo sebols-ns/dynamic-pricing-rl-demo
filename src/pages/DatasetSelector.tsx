@@ -102,6 +102,7 @@ export function DatasetSelector({ onSelected }: DatasetSelectorProps) {
           </div>
           <Typography variant="body-sm" style={{ color: 'var(--color-secondary)', marginBottom: '16px' }}>
             Large multi-store retail dataset with inventory levels, weather, seasonality, and a pre-computed demand forecast.
+            Covers 500 products across multiple stores with rich temporal patterns for robust pricing strategies.
           </Typography>
           <div className="flex flex-wrap" style={{ gap: '6px', marginBottom: '12px' }}>
             <Badge variant="neutral">~73,100 rows</Badge>

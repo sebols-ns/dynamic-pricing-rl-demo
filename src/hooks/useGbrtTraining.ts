@@ -8,7 +8,8 @@ import {
 
 export interface R2HistoryPoint {
   tree: number;
-  r2: number;
+  train: number;
+  test: number;
 }
 
 interface GbrtTrainingState {
@@ -17,6 +18,9 @@ interface GbrtTrainingState {
   currentTree: number;
   totalTrees: number;
   trainR2: number;
+  testR2: number;
+  trainSize: number;
+  testSize: number;
   featureImportance: number[];
   featureNames: string[];
   predictions: Float64Array | null;
@@ -35,6 +39,9 @@ export function useGbrtTraining() {
     currentTree: 0,
     totalTrees: DEFAULT_GBRT_CONFIG.nTrees,
     trainR2: 0,
+    testR2: 0,
+    trainSize: 0,
+    testSize: 0,
     featureImportance: [],
     featureNames: [],
     predictions: null,
@@ -55,15 +62,20 @@ export function useGbrtTraining() {
 
   const flushSnapshot = useCallback((snapshot: GBRTSnapshot, ctx: TrainingContext) => {
     const curve = generateDemandCurve(ctx.model, rowsRef.current);
-    r2HistoryRef.current.push({ tree: snapshot.treeIndex + 1, r2: snapshot.trainR2 });
+    r2HistoryRef.current.push({
+      tree: snapshot.treeIndex + 1,
+      train: snapshot.trainR2,
+      test: snapshot.testR2,
+    });
     setState(prev => ({
       ...prev,
       currentTree: snapshot.treeIndex + 1,
       trainR2: snapshot.trainR2,
+      testR2: snapshot.testR2,
       featureImportance: snapshot.featureImportance,
       featureNames: ctx.model.featureNames,
       predictions: snapshot.predictions,
-      actuals: dataRef.current?.y ?? null,
+      actuals: ctx.y,
       model: ctx.model,
       demandCurveData: curve,
       r2History: r2HistoryRef.current.slice(),
@@ -89,10 +101,13 @@ export function useGbrtTraining() {
       currentTree: 0,
       totalTrees: fullConfig.nTrees,
       trainR2: 0,
+      testR2: 0,
+      trainSize: ctx.nRows,
+      testSize: ctx.testIndices.length,
       featureImportance: [],
       featureNames: data.featureNames,
       predictions: null,
-      actuals: data.y,
+      actuals: ctx.y,
       model: null,
       demandCurveData: [],
       r2History: [],
@@ -164,6 +179,7 @@ export function useGbrtTraining() {
       isComplete: false,
       currentTree: 0,
       trainR2: 0,
+      testR2: 0,
       featureImportance: [],
       predictions: null,
       model: null,

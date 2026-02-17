@@ -41,6 +41,7 @@ export interface GBRTConfig {
 export interface GBRTSnapshot {
   treeIndex: number;
   trainR2: number;
+  testR2: number;
   featureImportance: number[];
   predictions: Float64Array;
 }
@@ -388,7 +389,13 @@ export interface TrainingContext {
   featureImportance: Float64Array;
   config: GBRTConfig;
   model: GBRTModel;
-  nRows: number;
+  nRows: number;         // training rows only
+  nRowsTotal: number;    // all rows (train + test)
+  trainIndices: number[];
+  testIndices: number[];
+  // Full-dataset arrays for test R² computation
+  allX: Float64Array[];
+  allY: Float64Array;
   binned: BinnedFeatures;
   histSum: Float64Array;
   histCount: Uint32Array;
@@ -397,19 +404,43 @@ export interface TrainingContext {
 export function initTraining(data: PreparedData, config: GBRTConfig = DEFAULT_GBRT_CONFIG): TrainingContext {
   const { X, y, nRows } = data;
 
-  // Pre-bin features (one-time cost)
-  const binned = binFeatures(X, nRows);
+  // Shuffle indices for train/test split
+  const allIdx: number[] = [];
+  for (let i = 0; i < nRows; i++) allIdx.push(i);
+  for (let i = nRows - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    const tmp = allIdx[i]; allIdx[i] = allIdx[j]; allIdx[j] = tmp;
+  }
 
-  // Intercept = mean(y)
+  const testSize = Math.max(1, Math.floor(nRows * 0.2));
+  const trainSize = nRows - testSize;
+  const trainIndices = allIdx.slice(0, trainSize);
+  const testIndices = allIdx.slice(trainSize);
+
+  // Build column-major train subset
+  const nF = X.length;
+  const trainX: Float64Array[] = [];
+  for (let f = 0; f < nF; f++) {
+    const col = new Float64Array(trainSize);
+    for (let i = 0; i < trainSize; i++) col[i] = X[f][trainIndices[i]];
+    trainX.push(col);
+  }
+  const trainY = new Float64Array(trainSize);
+  for (let i = 0; i < trainSize; i++) trainY[i] = y[trainIndices[i]];
+
+  // Pre-bin train features only (one-time cost)
+  const binned = binFeatures(trainX, trainSize);
+
+  // Intercept = mean(trainY)
   let sum = 0;
-  for (let i = 0; i < nRows; i++) sum += y[i];
-  const intercept = sum / nRows;
+  for (let i = 0; i < trainSize; i++) sum += trainY[i];
+  const intercept = sum / trainSize;
 
-  const predictions = new Float64Array(nRows);
-  const residuals = new Float64Array(nRows);
+  const predictions = new Float64Array(trainSize);
+  const residuals = new Float64Array(trainSize);
   predictions.fill(intercept);
-  for (let i = 0; i < nRows; i++) {
-    residuals[i] = y[i] - intercept;
+  for (let i = 0; i < trainSize; i++) {
+    residuals[i] = trainY[i] - intercept;
   }
 
   const model: GBRTModel = {
@@ -421,14 +452,19 @@ export function initTraining(data: PreparedData, config: GBRTConfig = DEFAULT_GB
   };
 
   return {
-    X,
-    y,
+    X: trainX,
+    y: trainY,
     residuals,
     predictions,
     featureImportance: new Float64Array(data.nFeatures),
     config,
     model,
-    nRows,
+    nRows: trainSize,
+    nRowsTotal: nRows,
+    trainIndices,
+    testIndices,
+    allX: X,
+    allY: y,
     binned,
     histSum: new Float64Array(binned.maxBins),
     histCount: new Uint32Array(binned.maxBins),
@@ -486,7 +522,7 @@ export function trainOneTree(ctx: TrainingContext, treeIndex: number): GBRTSnaps
       : 0;
   }
 
-  // Compute R²
+  // Compute train R²
   let ssRes = 0;
   let ssTot = 0;
   let meanY = 0;
@@ -498,11 +534,36 @@ export function trainOneTree(ctx: TrainingContext, treeIndex: number): GBRTSnaps
     const diffMean = y[i] - meanY;
     ssTot += diffMean * diffMean;
   }
-  const r2 = ssTot > 0 ? 1 - ssRes / ssTot : 0;
+  const trainR2 = ssTot > 0 ? 1 - ssRes / ssTot : 0;
+
+  // Compute test R² (out-of-sample)
+  const testIdx = ctx.testIndices;
+  const nTest = testIdx.length;
+  let testR2 = 0;
+  if (nTest > 0) {
+    let testMeanY = 0;
+    for (let i = 0; i < nTest; i++) testMeanY += ctx.allY[testIdx[i]];
+    testMeanY /= nTest;
+
+    let testSsRes = 0;
+    let testSsTot = 0;
+    const fv = new Float64Array(X.length);
+    for (let i = 0; i < nTest; i++) {
+      const ri = testIdx[i];
+      for (let f = 0; f < X.length; f++) fv[f] = ctx.allX[f][ri];
+      const pred = predictModel(model, fv);
+      const diff = ctx.allY[ri] - pred;
+      testSsRes += diff * diff;
+      const diffMean = ctx.allY[ri] - testMeanY;
+      testSsTot += diffMean * diffMean;
+    }
+    testR2 = testSsTot > 0 ? 1 - testSsRes / testSsTot : 0;
+  }
 
   return {
     treeIndex,
-    trainR2: r2,
+    trainR2,
+    testR2,
     featureImportance: model.featureImportance.slice(),
     predictions: predictions.slice() as Float64Array,
   };
@@ -521,6 +582,113 @@ export interface DemandCurvePoint {
  * Generate a demand curve by varying price across a range for a given product's
  * average feature values.
  */
+// ---------------------------------------------------------------------------
+// Interactive Partial Dependence Plot
+// ---------------------------------------------------------------------------
+
+export interface PDPLine {
+  label: string;
+  points: { x: number; y: number }[];
+}
+
+export interface PDPResult {
+  sweepFeatureName: string;
+  conditionFeatureName: string | null;
+  lines: PDPLine[];
+}
+
+/**
+ * Generate partial dependence data: sweep one feature while holding others at
+ * their means. Optionally condition on a second feature to show multiple curves
+ * (e.g., "demand vs price in summer vs winter").
+ */
+export function generatePDP(
+  model: GBRTModel,
+  rows: RetailRow[],
+  sweepFeature: string,
+  conditionFeature: string | null = null,
+  numPoints: number = 30,
+): PDPResult {
+  if (rows.length === 0 || model.trees.length === 0) {
+    return { sweepFeatureName: sweepFeature, conditionFeatureName: conditionFeature, lines: [] };
+  }
+
+  const sweepIdx = FEATURE_NAMES.indexOf(sweepFeature);
+  const condIdx = conditionFeature ? FEATURE_NAMES.indexOf(conditionFeature) : -1;
+
+  // Build feature matrix for averages
+  const featureVals = (r: RetailRow): number[] => [
+    r.unit_price, r.comp_1, r.month, r.lag_price,
+    r.holiday, r.weekday, r.product_score, r.freight_price,
+    encodeCategory(r.product_category_name), r.discount,
+  ];
+
+  // Split rows into condition groups
+  const groups: { label: string; rows: RetailRow[] }[] = [];
+
+  if (conditionFeature && condIdx >= 0) {
+    if (conditionFeature === 'month') {
+      const summer = rows.filter(r => [6, 7, 8].includes(r.month));
+      const winter = rows.filter(r => [12, 1, 2].includes(r.month));
+      const other = rows.filter(r => ![6, 7, 8, 12, 1, 2].includes(r.month));
+      if (summer.length > 0) groups.push({ label: 'Summer (Jun-Aug)', rows: summer });
+      if (winter.length > 0) groups.push({ label: 'Winter (Dec-Feb)', rows: winter });
+      if (other.length > 0) groups.push({ label: 'Spring/Fall', rows: other });
+    } else if (conditionFeature === 'holiday') {
+      const holiday = rows.filter(r => r.holiday === 1);
+      const noHoliday = rows.filter(r => r.holiday === 0);
+      if (holiday.length > 0) groups.push({ label: 'Holiday', rows: holiday });
+      if (noHoliday.length > 0) groups.push({ label: 'Non-Holiday', rows: noHoliday });
+    } else {
+      // Continuous: median split
+      const vals = rows.map(r => featureVals(r)[condIdx]).sort((a, b) => a - b);
+      const median = vals[Math.floor(vals.length / 2)];
+      const low = rows.filter(r => featureVals(r)[condIdx] <= median);
+      const high = rows.filter(r => featureVals(r)[condIdx] > median);
+      const condName = FEATURE_NAMES[condIdx];
+      if (low.length > 0) groups.push({ label: `Low ${condName}`, rows: low });
+      if (high.length > 0) groups.push({ label: `High ${condName}`, rows: high });
+    }
+  } else {
+    groups.push({ label: 'All Data', rows });
+  }
+
+  // Get sweep range from the data
+  const allSweepVals = rows.map(r => featureVals(r)[sweepIdx]).sort((a, b) => a - b);
+  const sweepMin = allSweepVals[Math.floor(allSweepVals.length * 0.02)];
+  const sweepMax = allSweepVals[Math.floor(allSweepVals.length * 0.98)];
+
+  const lines: PDPLine[] = [];
+
+  for (const group of groups) {
+    // Compute mean features for this group
+    const nF = FEATURE_NAMES.length;
+    const avgFeatures = new Float64Array(nF);
+    for (const r of group.rows) {
+      const fv = featureVals(r);
+      for (let f = 0; f < nF; f++) avgFeatures[f] += fv[f];
+    }
+    for (let f = 0; f < nF; f++) avgFeatures[f] /= group.rows.length;
+    // Use first row's category encoding (mean of hashes is meaningless)
+    avgFeatures[8] = encodeCategory(group.rows[0].product_category_name);
+
+    const pts: { x: number; y: number }[] = [];
+    for (let i = 0; i < numPoints; i++) {
+      const xVal = sweepMin + (sweepMax - sweepMin) * (i / (numPoints - 1));
+      const features = avgFeatures.slice();
+      features[sweepIdx] = xVal;
+      const yVal = predictModel(model, features);
+      pts.push({
+        x: Math.round(xVal * 100) / 100,
+        y: Math.round(yVal * 10) / 10,
+      });
+    }
+    lines.push({ label: group.label, points: pts });
+  }
+
+  return { sweepFeatureName: sweepFeature, conditionFeatureName: conditionFeature, lines };
+}
+
 export function generateDemandCurve(
   model: GBRTModel,
   rows: RetailRow[],

@@ -1,13 +1,12 @@
 import { useState, useEffect, useMemo } from 'react';
 import {
   Typography, Button, Badge,
-  Select, SelectTrigger, SelectValue, SelectContent, SelectItem,
 } from '@northslopetech/altitude-ui';
 import {
   ResponsiveContainer,
   ScatterChart, Scatter, XAxis, YAxis, CartesianGrid,
   Tooltip as RechartsTooltip,
-  LineChart, Line,
+  LineChart, Line, Legend,
   BarChart as RechartsBarChart, Bar,
 } from 'recharts';
 import { useCsvData } from '../hooks/useCsvData';
@@ -15,12 +14,39 @@ import { useDemandModel } from '../hooks/useDemandModel';
 import { useGbrtTraining } from '../hooks/useGbrtTraining';
 import { TreeVisualization } from '../components/TreeVisualization';
 import { mean } from '../utils/math';
+import { generatePDP, FEATURE_NAMES, type PDPResult } from '../engine/gbrt';
 
 const cardStyle: React.CSSProperties = {
   border: '1px solid var(--color-subtle)',
   borderRadius: '8px',
   padding: '20px',
   backgroundColor: 'var(--color-base-white)',
+};
+
+const PDP_COLORS = ['#2563eb', '#dc2626', '#059669', '#d97706'];
+
+const SWEEP_OPTIONS = FEATURE_NAMES.filter(f => f !== 'category');
+const CONDITION_OPTIONS = ['none', ...FEATURE_NAMES.filter(f => f !== 'category')];
+
+const FEATURE_LABELS: Record<string, string> = {
+  unit_price: 'Price',
+  comp_1: 'Competitor Price',
+  month: 'Month',
+  lag_price: 'Lag Price',
+  holiday: 'Holiday',
+  weekday: 'Weekday',
+  product_score: 'Product Score',
+  freight_price: 'Freight',
+  discount: 'Discount',
+};
+
+const selectStyle: React.CSSProperties = {
+  padding: '4px 8px',
+  borderRadius: '6px',
+  border: '1px solid var(--color-subtle)',
+  fontSize: '12px',
+  backgroundColor: 'var(--color-base-white)',
+  cursor: 'pointer',
 };
 
 interface DemandModelProps {
@@ -32,8 +58,10 @@ export function DemandModel({ gbrtTraining, onComplete }: DemandModelProps) {
   const { rows, products, isLoaded, datasetName } = useCsvData();
   const { mode, setMode } = useDemandModel();
   const [selectedProduct, setSelectedProduct] = useState('');
-  const [speed, setSpeed] = useState(1);
+  const [speed, setSpeed] = useState(10);
   const [showTransition, setShowTransition] = useState(false);
+  const [pdpSweep, setPdpSweep] = useState('unit_price');
+  const [pdpCondition, setPdpCondition] = useState('none');
 
   const isStoreInventory = datasetName === 'store_inventory';
   const gbtAvailable = !isStoreInventory;
@@ -110,6 +138,30 @@ export function DemandModel({ gbrtTraining, onComplete }: DemandModelProps) {
       }))
       .sort((a, b) => b.importance - a.importance);
   }, [gbrtTraining.featureImportance, gbrtTraining.featureNames]);
+
+  // Interactive PDP data
+  const pdpData: PDPResult | null = useMemo(() => {
+    if (!gbrtTraining.model || gbrtTraining.model.trees.length === 0 || rows.length === 0) return null;
+    return generatePDP(
+      gbrtTraining.model,
+      rows,
+      pdpSweep,
+      pdpCondition === 'none' ? null : pdpCondition,
+    );
+  }, [gbrtTraining.model, gbrtTraining.model?.trees.length, rows, pdpSweep, pdpCondition]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Flatten PDP lines into recharts-friendly format
+  const pdpChartData = useMemo(() => {
+    if (!pdpData || pdpData.lines.length === 0) return [];
+    const firstLine = pdpData.lines[0];
+    return firstLine.points.map((pt, i) => {
+      const row: Record<string, number> = { x: pt.x };
+      for (const line of pdpData.lines) {
+        row[line.label] = line.points[i]?.y ?? 0;
+      }
+      return row;
+    });
+  }, [pdpData]);
 
   // Trigger completion callback
   useEffect(() => {
@@ -254,10 +306,13 @@ export function DemandModel({ gbrtTraining, onComplete }: DemandModelProps) {
               demand patterns directly from the data — including non-linear price sensitivity, seasonal effects,
               and feature interactions that a simple formula can't capture.
             </Typography>
-            <div className="flex" style={{ gap: '8px', marginTop: '12px' }}>
+            <div className="flex flex-wrap" style={{ gap: '8px', marginTop: '12px' }}>
               <Badge variant="neutral">{rows.length.toLocaleString()} rows</Badge>
               <Badge variant="neutral">10 features</Badge>
               <Badge variant="neutral">{gbrtTraining.totalTrees} trees</Badge>
+              {gbrtTraining.trainSize > 0 && (
+                <Badge variant="primary">{gbrtTraining.trainSize} train / {gbrtTraining.testSize} test (80/20 split)</Badge>
+              )}
             </div>
           </div>
 
@@ -270,17 +325,6 @@ export function DemandModel({ gbrtTraining, onComplete }: DemandModelProps) {
                 </Button>
               ) : (
                 <Button onClick={gbrtTraining.pause} variant="outline">Pause</Button>
-              )}
-              <Button onClick={gbrtTraining.stepOnce} variant="outline" disabled={gbrtTraining.isRunning || gbrtTraining.isComplete}>
-                Step
-              </Button>
-              {gbrtTraining.isComplete && (
-                <Button
-                  onClick={() => { gbrtTraining.trainMore(500); gbrtTraining.play(); }}
-                  variant="outline"
-                >
-                  +500 Trees
-                </Button>
               )}
               <Button onClick={gbrtTraining.reset} variant="ghost">
                 Reset
@@ -299,11 +343,18 @@ export function DemandModel({ gbrtTraining, onComplete }: DemandModelProps) {
               />
             </div>
 
-            <div>
+            <div className="flex flex-wrap" style={{ gap: '6px' }}>
               {gbrtTraining.isComplete ? (
-                <Badge variant="success">Training Complete (R² = {gbrtTraining.trainR2.toFixed(3)})</Badge>
+                <>
+                  <Badge variant="success">Complete</Badge>
+                  <Badge variant="primary">Test R² = {gbrtTraining.testR2.toFixed(3)}</Badge>
+                  <Badge variant="neutral">Train R² = {gbrtTraining.trainR2.toFixed(3)}</Badge>
+                </>
               ) : gbrtTraining.currentTree > 0 ? (
-                <Badge variant="primary">R² = {gbrtTraining.trainR2.toFixed(3)}</Badge>
+                <>
+                  <Badge variant="primary">Test R² = {gbrtTraining.testR2.toFixed(3)}</Badge>
+                  <Badge variant="neutral">Train R² = {gbrtTraining.trainR2.toFixed(3)}</Badge>
+                </>
               ) : null}
             </div>
           </div>
@@ -361,8 +412,8 @@ export function DemandModel({ gbrtTraining, onComplete }: DemandModelProps) {
               {/* Accuracy scatter: actual vs predicted */}
               <div style={cardStyle}>
                 <div className="flex items-center justify-between" style={{ marginBottom: '12px' }}>
-                  <Typography variant="label-md-bold">Actual vs Predicted Qty</Typography>
-                  <Badge variant="primary">R² = {gbrtTraining.trainR2.toFixed(3)}</Badge>
+                  <Typography variant="label-md-bold">Actual vs Predicted (Train Set)</Typography>
+                  <Badge variant="primary">Train R² = {gbrtTraining.trainR2.toFixed(3)}</Badge>
                 </div>
                 <ResponsiveContainer width="100%" height={300}>
                   <ScatterChart margin={{ top: 8, right: 16, left: 8, bottom: 24 }}>
@@ -403,11 +454,11 @@ export function DemandModel({ gbrtTraining, onComplete }: DemandModelProps) {
                 </ResponsiveContainer>
               </div>
 
-              {/* R² over time */}
+              {/* R² over time: train vs test */}
               <div style={cardStyle}>
                 <Typography variant="label-md-bold" style={{ marginBottom: '4px' }}>R² Over Training</Typography>
                 <Typography variant="body-xs" style={{ color: 'var(--color-secondary)', marginBottom: '12px' }}>
-                  Model accuracy as trees are added. Diminishing returns indicate the model has converged.
+                  Train vs test (holdout) accuracy. A growing gap between the lines indicates overfitting.
                 </Typography>
                 <ResponsiveContainer width="100%" height={300}>
                   <LineChart data={gbrtTraining.r2History} margin={{ top: 8, right: 16, left: 8, bottom: 24 }}>
@@ -419,10 +470,81 @@ export function DemandModel({ gbrtTraining, onComplete }: DemandModelProps) {
                       label={{ value: 'R²', angle: -90, position: 'insideLeft', offset: 4, fontSize: 12 }}
                     />
                     <RechartsTooltip formatter={((v: number) => v.toFixed(4)) as any} />
-                    <Line type="monotone" dataKey="r2" name="R²" stroke="var(--color-success)" strokeWidth={2} dot={false} isAnimationActive={false} />
+                    <Legend verticalAlign="top" height={28} wrapperStyle={{ fontSize: '12px' }} />
+                    <Line type="monotone" dataKey="train" name="Train R²" stroke="var(--color-neutral-400)" strokeWidth={1.5} dot={false} isAnimationActive={false} />
+                    <Line type="monotone" dataKey="test" name="Test R²" stroke="var(--color-success)" strokeWidth={2} dot={false} isAnimationActive={false} />
                   </LineChart>
                 </ResponsiveContainer>
               </div>
+
+              {/* Interactive Partial Dependence Plot */}
+              {pdpData && pdpData.lines.length > 0 && (
+                <div style={cardStyle}>
+                  <div className="flex items-center justify-between" style={{ marginBottom: '4px' }}>
+                    <Typography variant="label-md-bold">Elasticity Explorer</Typography>
+                  </div>
+                  <Typography variant="body-xs" style={{ color: 'var(--color-secondary)', marginBottom: '12px' }}>
+                    How predicted demand changes as you sweep one feature. Toggle conditions to compare elasticity across market states.
+                  </Typography>
+                  <div className="flex items-center flex-wrap" style={{ gap: '12px', marginBottom: '12px' }}>
+                    <label style={{ fontSize: '12px', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                      Sweep:
+                      <select
+                        value={pdpSweep}
+                        onChange={e => setPdpSweep(e.target.value)}
+                        style={selectStyle}
+                      >
+                        {SWEEP_OPTIONS.map(f => (
+                          <option key={f} value={f}>{FEATURE_LABELS[f] || f}</option>
+                        ))}
+                      </select>
+                    </label>
+                    <label style={{ fontSize: '12px', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                      Compare by:
+                      <select
+                        value={pdpCondition}
+                        onChange={e => setPdpCondition(e.target.value)}
+                        style={selectStyle}
+                      >
+                        <option value="none">None (single curve)</option>
+                        {CONDITION_OPTIONS.filter(f => f !== 'none' && f !== pdpSweep).map(f => (
+                          <option key={f} value={f}>{FEATURE_LABELS[f] || f}</option>
+                        ))}
+                      </select>
+                    </label>
+                  </div>
+                  <ResponsiveContainer width="100%" height={300}>
+                    <LineChart data={pdpChartData} margin={{ top: 8, right: 16, left: 8, bottom: 24 }}>
+                      <CartesianGrid strokeDasharray="3 3" stroke="var(--color-neutral-200)" />
+                      <XAxis
+                        dataKey="x"
+                        tick={{ fontSize: 11 }}
+                        label={{ value: FEATURE_LABELS[pdpSweep] || pdpSweep, position: 'insideBottom', offset: -12, fontSize: 12 }}
+                      />
+                      <YAxis
+                        tick={{ fontSize: 11 }}
+                        label={{ value: 'Predicted Qty', angle: -90, position: 'insideLeft', offset: 4, fontSize: 12 }}
+                      />
+                      <RechartsTooltip />
+                      {pdpData.lines.length > 1 && (
+                        <Legend verticalAlign="top" height={28} wrapperStyle={{ fontSize: '12px' }} />
+                      )}
+                      {pdpData.lines.map((line, i) => (
+                        <Line
+                          key={line.label}
+                          type="monotone"
+                          dataKey={line.label}
+                          name={line.label}
+                          stroke={PDP_COLORS[i % PDP_COLORS.length]}
+                          strokeWidth={2}
+                          dot={false}
+                          isAnimationActive={false}
+                        />
+                      ))}
+                    </LineChart>
+                  </ResponsiveContainer>
+                </div>
+              )}
             </div>
           )}
 

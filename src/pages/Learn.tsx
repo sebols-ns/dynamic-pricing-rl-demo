@@ -200,32 +200,108 @@ export function Learn({ onNavigate }: LearnProps) {
       </Section>
 
       {/* ---- Demand Model Modes ---- */}
-      <Section title="Simple vs Advanced Demand Models" badge="New">
+      <Section title="Simple vs Advanced Demand Models" badge="Key Decision">
         <Typography variant="body-sm">
-          The demo offers two demand models that power the RL agent's environment:
+          The demand model is the most important component in this pipeline — it defines the environment
+          the RL agent trains against. A bad demand model means the agent optimises for a fictional market.
+          The demo offers two approaches:
         </Typography>
         <ul className="list-disc list-inside space-y-2">
           <Typography variant="body-sm" as="li">
-            <strong>Simple (Log-Linear)</strong> — A hand-coded elasticity formula where demand decreases exponentially
-            with price. Fast and interpretable, but assumes a specific functional form that may not match real data.
+            <strong>Simple (Log-Linear)</strong> — A hand-coded elasticity formula: <code style={{ background: 'var(--color-gray)', padding: '1px 4px', borderRadius: '3px' }}>Q = Q₀ × exp(−ε × ΔP/P₀)</code>.
+            Fast, interpretable, and requires no training. But it makes strong assumptions: demand always decreases
+            smoothly with price, the same curve shape applies everywhere, and there are no feature interactions.
           </Typography>
           <Typography variant="body-sm" as="li">
             <strong>Advanced (Gradient Boosted Trees)</strong> — A machine learning model trained directly on the dataset.
             It learns non-linear relationships between price, competitor pricing, seasonality, and other features to
-            predict demand. More accurate but requires training time.
+            predict demand. More accurate but requires training time. Available for the Retail Price dataset.
           </Typography>
         </ul>
         <Typography variant="body-sm">
-          <Term term="Gradient Boosted Trees (GBT)" definition="An ensemble method that builds decision trees sequentially. Each new tree corrects the errors of previous trees, gradually improving prediction accuracy." /> work
-          by building trees iteratively — each tree corrects the mistakes of the ensemble so far. The model starts
-          with a simple average prediction, then adds trees that each reduce the remaining error. After 100 trees,
-          the combined model captures complex patterns like non-linear price sensitivity and feature interactions.
+          The Store Inventory dataset includes a pre-computed <code style={{ background: 'var(--color-gray)', padding: '1px 4px', borderRadius: '3px' }}>demand_forecast</code> column,
+          so GBT training is not needed — the RL agent uses the dataset's own predictions as the demand baseline.
+        </Typography>
+      </Section>
+
+      {/* ---- GBT Deep Dive ---- */}
+      <Section title="How the GBT Demand Model Works" badge="LightGBM-style" onNavigate={onNavigate} tryItTab="demand-model">
+        <Typography variant="body-sm">
+          <Term term="Gradient Boosted Trees (GBT)" definition="An ensemble method that builds decision trees sequentially. Each new tree corrects the errors of previous trees, gradually improving prediction accuracy." /> is
+          the same algorithm family behind <strong>LightGBM</strong>, <strong>XGBoost</strong>, and <strong>CatBoost</strong> —
+          the most widely used ML models in industry for tabular data. Here's how our implementation works:
+        </Typography>
+        <Typography variant="heading-xs" style={{ marginTop: '8px' }}>Training process</Typography>
+        <ol className="list-decimal list-inside space-y-1">
+          <Typography variant="body-sm" as="li">
+            <strong>Start with the mean</strong> — The initial prediction for every row is simply the average quantity sold
+            across the entire dataset. This is the "intercept".
+          </Typography>
+          <Typography variant="body-sm" as="li">
+            <strong>Compute residuals</strong> — For each row, calculate the error: <code style={{ background: 'var(--color-gray)', padding: '1px 4px', borderRadius: '3px' }}>residual = actual − predicted</code>.
+            These residuals are what the next tree will try to predict.
+          </Typography>
+          <Typography variant="body-sm" as="li">
+            <strong>Build a decision tree on residuals</strong> — The tree finds the best feature and split point at each node
+            to partition rows into groups with similar residuals. Uses histogram-based split finding (64 quantile bins per feature)
+            for speed.
+          </Typography>
+          <Typography variant="body-sm" as="li">
+            <strong>Update predictions</strong> — Add the tree's predictions (scaled by the learning rate) to the running total:
+            <code style={{ background: 'var(--color-gray)', padding: '1px 4px', borderRadius: '3px' }}>pred += 0.1 × tree(x)</code>
+          </Typography>
+          <Typography variant="body-sm" as="li">
+            <strong>Repeat</strong> — Each new tree corrects the remaining errors. After 2,000 trees, the ensemble captures
+            complex non-linear patterns.
+          </Typography>
+        </ol>
+        <Typography variant="heading-xs" style={{ marginTop: '8px' }}>Features used (10 total)</Typography>
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '4px 24px' }}>
+          {[
+            ['unit_price', 'The price being charged — the key lever'],
+            ['comp_1', 'Competitor price — market positioning'],
+            ['month', 'Month of year — captures seasonality'],
+            ['lag_price', 'Previous period price — price momentum'],
+            ['holiday', 'Binary holiday flag — demand spikes'],
+            ['weekday', 'Day of week — weekly demand patterns'],
+            ['product_score', 'Customer review score — quality signal'],
+            ['freight_price', 'Shipping cost — cost proxy'],
+            ['category', 'Product category (hash-encoded) — category-level demand'],
+            ['discount', 'Discount applied — promotional effects'],
+          ].map(([feat, desc]) => (
+            <Typography key={feat} variant="body-xs" style={{ color: 'var(--color-secondary)' }}>
+              <code style={{ background: 'var(--color-gray)', padding: '1px 4px', borderRadius: '3px' }}>{feat}</code> — {desc}
+            </Typography>
+          ))}
+        </div>
+        <Typography variant="heading-xs" style={{ marginTop: '8px' }}>Why GBT beats the formula</Typography>
+        <Typography variant="body-sm">
+          The log-linear model produces one smooth demand curve regardless of conditions. GBT learns <strong>different
+          curves for different contexts</strong> — demand may respond differently to price in summer vs. winter, or when
+          competitors are cheap vs. expensive. These non-linear interactions and context-dependent kinks are visible
+          in the <strong>Elasticity Explorer</strong> chart.
         </Typography>
         <Typography variant="body-sm">
-          Why does it matter? The RL agent learns by simulating pricing decisions against the demand model.
-          A more accurate demand model produces more realistic simulations, leading to a better-trained pricing agent.
-          Compare the two modes to see the difference in RL performance.
+          This matters because the RL agent is only as good as its environment. If the demand model says "raising price
+          always drops demand by the same amount", the agent learns a one-size-fits-all strategy. If the demand model
+          captures that demand is price-insensitive in summer but elastic in winter, the agent learns to price higher
+          in summer — which is the whole point of dynamic pricing.
         </Typography>
+        <Typography variant="heading-xs" style={{ marginTop: '8px' }}>Hyperparameters</Typography>
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '4px 24px' }}>
+          {[
+            ['2,000 trees', 'Enough for convergence on this dataset size'],
+            ['Max depth = 5', 'Limits individual tree complexity to prevent overfitting'],
+            ['Min samples per leaf = 20', 'Ensures each leaf has enough data to be meaningful'],
+            ['Learning rate = 0.1', 'Each tree contributes 10% of its prediction — slower learning, better generalisation'],
+            ['Subsample rate = 0.8', 'Each tree sees 80% of data — adds randomness, reduces overfitting'],
+            ['64 histogram bins', 'Quantile-based binning for fast O(n) split finding'],
+          ].map(([param, desc]) => (
+            <Typography key={param} variant="body-xs" style={{ color: 'var(--color-secondary)' }}>
+              <strong>{param}</strong> — {desc}
+            </Typography>
+          ))}
+        </div>
       </Section>
 
       {/* ---- Demand Model ---- */}
