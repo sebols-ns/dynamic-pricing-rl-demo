@@ -6,7 +6,7 @@ import {
   CHART_COLORS, getSeriesColor,
 } from '@northslopetech/altitude-ui';
 import {
-  ResponsiveContainer, LineChart as RechartsLineChart, Line,
+  ResponsiveContainer, ComposedChart, Line, Scatter,
   XAxis, YAxis, Tooltip as RechartsTooltip, CartesianGrid,
 } from 'recharts';
 import { useCsvData } from '../hooks/useCsvData';
@@ -93,13 +93,14 @@ export function RlTraining({ training }: RlTrainingProps) {
     }
   }, [training.agent, training.env, training.episode, selectedProduct]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  // Downsample chart data — show ~60 points for smooth charts
+  // Downsample chart data — raw scatter points + smoothed line
   const chartData = useMemo(() => {
     const hist = training.history;
     if (hist.length === 0) return [];
 
-    // Compute smoothed values on full data first
     const smoothWindow = Math.max(5, Math.floor(hist.length / 20));
+
+    // Compute smoothed values on full data
     const full = hist.map((h, i) => {
       const start = Math.max(0, i - smoothWindow + 1);
       const slice = hist.slice(start, i + 1);
@@ -114,25 +115,57 @@ export function RlTraining({ training }: RlTrainingProps) {
       };
     });
 
-    const maxPoints = 60;
-    if (full.length <= maxPoints) return full.map(p => ({ ...p, episode: Math.round(p.episode) }));
-    const step = full.length / maxPoints;
-    const sampled = [];
-    const seen = new Set<number>();
-    for (let i = 0; i < maxPoints; i++) {
-      const point = full[Math.floor(i * step)];
-      const ep = Math.round(point.episode);
-      if (!seen.has(ep)) {
-        seen.add(ep);
-        sampled.push({ ...point, episode: ep });
+    // More raw points for scatter (up to 300), fewer for the smoothed line (60)
+    const maxScatter = 300;
+    const maxLine = 60;
+
+    const downsample = (data: typeof full, max: number) => {
+      if (data.length <= max) return data.map(p => ({ ...p, episode: Math.round(p.episode) }));
+      const step = data.length / max;
+      const sampled = [];
+      const seen = new Set<number>();
+      for (let i = 0; i < max; i++) {
+        const point = data[Math.floor(i * step)];
+        const ep = Math.round(point.episode);
+        if (!seen.has(ep)) {
+          seen.add(ep);
+          sampled.push({ ...point, episode: ep });
+        }
+      }
+      const lastEp = Math.round(data[data.length - 1].episode);
+      if (!seen.has(lastEp)) sampled.push({ ...data[data.length - 1], episode: lastEp });
+      return sampled;
+    };
+
+    // Merge: scatter points get reward, line points get smoothReward+revenue
+    // Use all scatter points as the base, overlay smoothed at line sample points
+    const scatterPoints = downsample(full, maxScatter);
+    const linePoints = downsample(full, maxLine);
+    const lineEpisodes = new Set(linePoints.map(p => p.episode));
+
+    // Build merged dataset: every scatter point has reward; line points also have smoothReward/revenue
+    const merged = scatterPoints.map(p => ({
+      episode: p.episode,
+      reward: p.reward,
+      smoothReward: lineEpisodes.has(p.episode) ? linePoints.find(lp => lp.episode === p.episode)!.smoothReward : undefined as number | undefined,
+      revenue: lineEpisodes.has(p.episode) ? linePoints.find(lp => lp.episode === p.episode)!.revenue : undefined as number | undefined,
+      epsilon: p.epsilon,
+    }));
+
+    // Add any line points not already in scatter
+    for (const lp of linePoints) {
+      if (!scatterPoints.some(sp => sp.episode === lp.episode)) {
+        merged.push({
+          episode: lp.episode,
+          reward: lp.reward,
+          smoothReward: lp.smoothReward,
+          revenue: lp.revenue,
+          epsilon: lp.epsilon,
+        });
       }
     }
-    // Always include the last point
-    const lastEp = Math.round(full[full.length - 1].episode);
-    if (!seen.has(lastEp)) {
-      sampled.push({ ...full[full.length - 1], episode: lastEp });
-    }
-    return sampled;
+    merged.sort((a, b) => a.episode - b.episode);
+    return merged;
   }, [training.history]);
 
   // Explicitly compute chart X domain to avoid Recharts caching stale bounds during streaming
@@ -370,20 +403,20 @@ export function RlTraining({ training }: RlTrainingProps) {
                   <span style={{ width: 12, height: 3, backgroundColor: getSeriesColor(0), display: 'inline-block', borderRadius: 1 }} /> Smoothed
                 </span>
                 <span style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
-                  <span style={{ width: 12, height: 3, backgroundColor: 'var(--color-neutral-400)', display: 'inline-block', borderRadius: 1 }} /> Raw
+                  <span style={{ width: 6, height: 6, backgroundColor: 'var(--color-neutral-400)', display: 'inline-block', borderRadius: '50%', opacity: 0.5 }} /> Raw
                 </span>
               </div>
             </div>
             <div style={{ padding: '8px 8px 16px' }}>
               <ResponsiveContainer width="100%" height={280}>
-                <RechartsLineChart data={chartData} margin={{ top: 8, right: 16, left: 8, bottom: 24 }}>
+                <ComposedChart data={chartData} margin={{ top: 8, right: 16, left: 8, bottom: 24 }}>
                   <CartesianGrid strokeDasharray="3 3" stroke="var(--color-neutral-200)" />
                   <XAxis dataKey="episode" type="number" domain={chartXDomain} tick={{ fontSize: 11 }} label={{ value: 'Episode', position: 'insideBottom', offset: -12, fontSize: 12 }} />
                   <YAxis domain={['auto', 'auto']} tick={{ fontSize: 11 }} label={{ value: 'Avg Reward', angle: -90, position: 'insideLeft', offset: 4, fontSize: 12 }} />
                   <RechartsTooltip />
-                  <Line type="monotone" dataKey="smoothReward" stroke={getSeriesColor(0)} strokeWidth={2} dot={false} activeDot={false} isAnimationActive={false} />
-                  <Line type="monotone" dataKey="reward" stroke="var(--color-neutral-400)" strokeWidth={1} dot={false} activeDot={false} isAnimationActive={false} />
-                </RechartsLineChart>
+                  <Scatter dataKey="reward" fill="var(--color-neutral-400)" opacity={0.25} isAnimationActive={false} name="Raw" />
+                  <Line type="monotone" dataKey="smoothReward" stroke={getSeriesColor(0)} strokeWidth={2} dot={false} activeDot={false} isAnimationActive={false} connectNulls name="Smoothed" />
+                </ComposedChart>
               </ResponsiveContainer>
             </div>
           </div>
@@ -403,14 +436,14 @@ export function RlTraining({ training }: RlTrainingProps) {
             </div>
             <div style={{ padding: '8px 8px 16px' }}>
               <ResponsiveContainer width="100%" height={280}>
-                <RechartsLineChart data={revenueChartData} margin={{ top: 8, right: 16, left: 16, bottom: 24 }}>
+                <ComposedChart data={revenueChartData} margin={{ top: 8, right: 16, left: 16, bottom: 24 }}>
                   <CartesianGrid strokeDasharray="3 3" stroke="var(--color-neutral-200)" />
                   <XAxis dataKey="episode" type="number" domain={chartXDomain} tick={{ fontSize: 11 }} label={{ value: 'Episode', position: 'insideBottom', offset: -12, fontSize: 12 }} />
                   <YAxis domain={['auto', 'auto']} tick={{ fontSize: 11 }} label={{ value: 'Avg Revenue ($)', angle: -90, position: 'insideLeft', offset: 0, fontSize: 12 }} />
                   <RechartsTooltip formatter={((value: number) => `$${value.toLocaleString()}`) as any} />
-                  <Line type="monotone" dataKey="revenue" stroke={CHART_COLORS.SUCCESS} strokeWidth={2} dot={false} activeDot={false} isAnimationActive={false} name="RL Agent" />
-                  <Line type="monotone" dataKey="staticRevenue" stroke="var(--color-neutral-400)" strokeWidth={2} strokeDasharray="6 4" dot={false} activeDot={false} isAnimationActive={false} name="Static (1.0x)" />
-                </RechartsLineChart>
+                  <Line type="monotone" dataKey="revenue" stroke={CHART_COLORS.SUCCESS} strokeWidth={2} dot={false} activeDot={false} isAnimationActive={false} connectNulls name="RL Agent" />
+                  <Line type="monotone" dataKey="staticRevenue" stroke="var(--color-neutral-400)" strokeWidth={2} strokeDasharray="6 4" dot={false} activeDot={false} isAnimationActive={false} connectNulls name="Static (1.0x)" />
+                </ComposedChart>
               </ResponsiveContainer>
             </div>
           </div>
