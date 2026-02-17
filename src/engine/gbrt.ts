@@ -47,11 +47,11 @@ export interface GBRTSnapshot {
 }
 
 export const DEFAULT_GBRT_CONFIG: GBRTConfig = {
-  maxDepth: 3,
-  minSamplesLeaf: 30,
-  learningRate: 0.05,
+  maxDepth: 4,
+  minSamplesLeaf: 10,
+  learningRate: 0.1,
   nTrees: 2000,
-  subsampleRate: 0.7,
+  subsampleRate: 0.8,
 };
 
 export const FEATURE_NAMES = [
