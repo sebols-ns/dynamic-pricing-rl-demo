@@ -71,6 +71,11 @@
   color: var(--color-dark) !important;
 }
 
+/* Ensure tooltip portals render above the Learn overlay (z-index: 40) */
+[data-radix-popper-content-wrapper] {
+  z-index: 60 !important;
+}
+
 /* Custom slider styling */
 input[type="range"] {
   -webkit-appearance: none;

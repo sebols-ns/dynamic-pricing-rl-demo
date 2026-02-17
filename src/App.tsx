@@ -368,12 +368,73 @@ function App() {
 
               {/* Main content */}
               <main style={{ maxWidth: '1280px', margin: '0 auto', padding: '0 32px' }}>
-                {learnOpen ? (
-                  <Learn onNavigate={(step) => { handleLearnNavigate(step); setLearnOpen(false); }} />
-                ) : (
-                  renderActiveStep()
-                )}
+                {renderActiveStep()}
               </main>
+
+              {/* Learn overlay */}
+              {learnOpen && (
+                <div
+                  style={{
+                    position: 'fixed',
+                    inset: 0,
+                    zIndex: 40,
+                    display: 'flex',
+                    flexDirection: 'column',
+                  }}
+                >
+                  {/* Backdrop */}
+                  <div
+                    onClick={() => setLearnOpen(false)}
+                    style={{
+                      position: 'absolute',
+                      inset: 0,
+                      backgroundColor: 'rgba(0,0,0,0.5)',
+                      backdropFilter: 'blur(4px)',
+                      WebkitBackdropFilter: 'blur(4px)',
+                    }}
+                  />
+                  {/* Content */}
+                  <div
+                    style={{
+                      position: 'relative',
+                      margin: '32px',
+                      flex: 1,
+                      borderRadius: '12px',
+                      backgroundColor: 'var(--color-base-white)',
+                      overflow: 'auto',
+                      boxShadow: '0 25px 50px -12px rgba(0,0,0,0.25)',
+                    }}
+                  >
+                    {/* Close button */}
+                    <button
+                      onClick={() => setLearnOpen(false)}
+                      style={{
+                        position: 'sticky',
+                        top: '16px',
+                        float: 'right',
+                        marginRight: '16px',
+                        zIndex: 1,
+                        width: '32px',
+                        height: '32px',
+                        borderRadius: '6px',
+                        border: '1px solid var(--color-subtle)',
+                        backgroundColor: 'var(--color-base-white)',
+                        color: 'var(--color-secondary)',
+                        cursor: 'pointer',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        fontSize: '18px',
+                      }}
+                    >
+                      &times;
+                    </button>
+                    <div style={{ padding: '32px', maxWidth: '1280px', margin: '0 auto' }}>
+                      <Learn onNavigate={handleLearnNavigate} />
+                    </div>
+                  </div>
+                </div>
+              )}
             </div>
           </TrainedAgentContext.Provider>
         </DemandModelContext.Provider>
