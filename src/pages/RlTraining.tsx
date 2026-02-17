@@ -12,6 +12,7 @@ import {
 import { useCsvData } from '../hooks/useCsvData';
 import type { useRlTraining } from '../hooks/useRlTraining';
 import { useTrainedAgent } from '../hooks/useTrainedAgent';
+import { useDemandModel } from '../hooks/useDemandModel';
 import { getTrainRows } from '../utils/data-split';
 import { QTableHeatmap } from '../components/QTableHeatmap';
 import { MetricCard } from '../components/MetricCard';
@@ -58,6 +59,7 @@ function RlTerm({ term, definition, children }: { term: string; definition: stri
 export function RlTraining({ training }: RlTrainingProps) {
   const { rows, products, isLoaded, trainTestSplit } = useCsvData();
   const trainedCtx = useTrainedAgent();
+  const { mode: demandMode, model: demandModel } = useDemandModel();
   const [selectedProduct, setSelectedProduct] = useState<string>('');
   const [speed, setSpeed] = useState(1);
   const [weights] = useState<RewardWeights>({ revenue: 0.4, margin: 0.4, volume: 0.2 });
@@ -69,10 +71,10 @@ export function RlTraining({ training }: RlTrainingProps) {
         trainTestSplit.splitDate,
       );
       if (productRows.length > 0) {
-        training.initialize(productRows, weights);
+        training.initialize(productRows, weights, undefined, demandMode === 'advanced' ? demandModel ?? undefined : undefined);
       }
     }
-  }, [selectedProduct, isLoaded]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [selectedProduct, isLoaded, demandModel, demandMode]); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
     training.setSpeed(speed);
@@ -172,7 +174,12 @@ export function RlTraining({ training }: RlTrainingProps) {
 
   return (
     <div style={{ padding: '32px 0' }}>
-      <Typography variant="heading-lg" style={{ marginBottom: '24px' }}>RL Training</Typography>
+      <div className="flex items-center" style={{ gap: '12px', marginBottom: '24px' }}>
+        <Typography variant="heading-lg">RL Training</Typography>
+        <Badge variant={demandMode === 'advanced' ? 'primary' : 'neutral'}>
+          {demandMode === 'advanced' ? 'GBT demand model' : 'Linear demand model'}
+        </Badge>
+      </div>
 
       {/* MDP Explanation */}
       <div style={{ ...cardStyle, backgroundColor: 'var(--color-info-subtle)', borderColor: 'var(--color-blue-200)', marginBottom: '24px' }}>

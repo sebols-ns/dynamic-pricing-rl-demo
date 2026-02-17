@@ -4,9 +4,14 @@ import {
 } from '@northslopetech/altitude-ui';
 import { useCsvData } from '../hooks/useCsvData';
 import { useTrainedAgent } from '../hooks/useTrainedAgent';
+import { useDemandModel } from '../hooks/useDemandModel';
 import { DataLineage } from '../components/DataLineage';
 import { computeShapleyValues } from '../engine/explainer';
 import type { State } from '../types/rl';
+import {
+  ResponsiveContainer, BarChart as RechartsBarChart, Bar,
+  XAxis, YAxis, CartesianGrid, Tooltip as RechartsTooltip,
+} from 'recharts';
 
 const cardStyle: React.CSSProperties = {
   border: '1px solid var(--color-subtle)',
@@ -67,6 +72,7 @@ function SliderControl({ label, value, labels, max, onChange }: SliderControlPro
 export function Explainability() {
   const { isLoaded } = useCsvData();
   const { agent, env, isTrained, productId, episode } = useTrainedAgent();
+  const { mode: demandMode, model: demandModel } = useDemandModel();
   // Defaults differ from baseline (mid bins) so Shapley values are non-zero on load
   const [demandBin, setDemandBin] = useState(0);
   const [compBin, setCompBin] = useState(2);
@@ -440,6 +446,36 @@ export function Explainability() {
                 Final ${shapResult.finalPrice.toFixed(2)}
               </span>
             </div>
+          </div>
+        );
+      })()}
+
+      {/* Demand Model Feature Importance (Advanced mode only) */}
+      {demandMode === 'advanced' && demandModel && (() => {
+        const importanceData = demandModel.featureNames
+          .map((name, i) => ({
+            name,
+            importance: Math.round(demandModel.featureImportance[i] * 1000) / 10,
+          }))
+          .sort((a, b) => b.importance - a.importance);
+
+        return (
+          <div style={{ ...cardStyle, marginBottom: '24px' }}>
+            <Typography variant="label-md-bold" style={{ marginBottom: '4px' }}>
+              Demand Model — What Drives Demand
+            </Typography>
+            <Typography variant="body-xs" style={{ color: 'var(--color-secondary)', marginBottom: '16px' }}>
+              Feature importance from the GBT demand model, showing which features most influence predicted quantity.
+            </Typography>
+            <ResponsiveContainer width="100%" height={Math.max(200, importanceData.length * 32)}>
+              <RechartsBarChart data={importanceData} layout="vertical" margin={{ top: 8, right: 16, left: 100, bottom: 8 }}>
+                <CartesianGrid strokeDasharray="3 3" stroke="var(--color-neutral-200)" />
+                <XAxis type="number" tick={{ fontSize: 11 }} label={{ value: 'Importance (%)', position: 'insideBottom', offset: -4, fontSize: 12 }} />
+                <YAxis type="category" dataKey="name" tick={{ fontSize: 11 }} width={90} />
+                <RechartsTooltip formatter={((v: number) => `${v.toFixed(1)}%`) as any} />
+                <Bar dataKey="importance" fill="var(--color-interactive)" radius={[0, 4, 4, 0]} isAnimationActive={false} />
+              </RechartsBarChart>
+            </ResponsiveContainer>
           </div>
         );
       })()}

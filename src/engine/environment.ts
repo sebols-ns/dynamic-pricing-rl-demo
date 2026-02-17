@@ -3,10 +3,13 @@ import type { State, RewardWeights } from '../types/rl';
 import { ACTION_MULTIPLIERS, DEMAND_BINS, COMPETITOR_BINS, SEASON_BINS, LAG_PRICE_BINS, INVENTORY_BINS, FORECAST_BINS, NUM_ACTIONS } from '../types/rl';
 import { quantileBins, digitize, mean } from '../utils/math';
 import { computeReward } from './reward';
+import type { GBRTModel } from './gbrt';
+import { predictModel } from './gbrt';
 
 export interface EnvironmentConfig {
   productRows: RetailRow[];
   weights: RewardWeights;
+  demandModel?: GBRTModel;
 }
 
 export interface StepResult {
@@ -34,6 +37,7 @@ export class PricingEnvironment {
   private lastAction: number = -1;
   /** Penalty weight for price changes between steps (0 = no penalty) */
   private priceChangePenalty: number = 0.15;
+  private demandModel: GBRTModel | null = null;
 
   /** True when the data has meaningful inventory_level / demand_forecast columns */
   readonly hasExtendedState: boolean;
@@ -46,6 +50,7 @@ export class PricingEnvironment {
   constructor(config: EnvironmentConfig) {
     this.rows = config.productRows;
     this.weights = config.weights;
+    this.demandModel = config.demandModel ?? null;
 
     const qtys = this.rows.map(r => r.qty);
     const comps = this.rows.map(r => r.comp_1).filter(c => c > 0);
@@ -166,6 +171,66 @@ export class PricingEnvironment {
     return Math.min(4.0, Math.max(0.05, e));
   }
 
+  /**
+   * Predict demand using the GBRT model by building a feature vector from the row
+   * and overriding the price.
+   */
+  private predictWithGBRT(row: RetailRow, price: number): number {
+    if (!this.demandModel) return 0;
+    const features = [
+      price,
+      row.comp_1,
+      row.month,
+      row.lag_price,
+      row.inventory_level,
+      row.demand_forecast,
+      row.holiday,
+      row.weekday,
+      row.product_score,
+      row.freight_price,
+    ];
+    return Math.max(1, predictModel(this.demandModel, features));
+  }
+
+  /**
+   * Build an approximate feature vector from state bins for synthetic/simulated steps.
+   * Maps bins back to continuous values using stored thresholds or reasonable defaults.
+   */
+  private buildSyntheticFeatures(state: State, price: number): number[] {
+    // Map demand bin to approximate qty (not used as feature, but for reference)
+    const seasonToMonth = [1, 4, 7, 10]; // winter=Jan, spring=Apr, summer=Jul, fall=Oct
+    const month = seasonToMonth[state.seasonBin] ?? 1;
+
+    // Approximate comp_1 from bin
+    const compValues = this.compThresholds.length > 0
+      ? [this.compThresholds[0] * 0.8, mean(this.compThresholds), this.compThresholds[this.compThresholds.length - 1] * 1.2]
+      : [this.basePrice * 0.9, this.basePrice, this.basePrice * 1.1];
+    const comp = compValues[Math.min(state.competitorPriceBin, compValues.length - 1)];
+
+    // Approximate lag_price from bin
+    const lagValues = this.lagThresholds.length > 0
+      ? [this.lagThresholds[0] * 0.8, mean(this.lagThresholds), this.lagThresholds[this.lagThresholds.length - 1] * 1.2]
+      : [this.basePrice * 0.9, this.basePrice, this.basePrice * 1.1];
+    const lag = lagValues[Math.min(state.lagPriceBin, lagValues.length - 1)];
+
+    // Approximate inventory/forecast from bins
+    const invValues = this.inventoryThresholds.length > 1
+      ? [this.inventoryThresholds[0] * 0.5, mean(this.inventoryThresholds), this.inventoryThresholds[this.inventoryThresholds.length - 1] * 1.5]
+      : [50, 100, 200];
+    const inv = invValues[Math.min(state.inventoryBin, invValues.length - 1)];
+
+    const frcValues = this.forecastThresholds.length > 1
+      ? [this.forecastThresholds[0] * 0.5, mean(this.forecastThresholds), this.forecastThresholds[this.forecastThresholds.length - 1] * 1.5]
+      : [this.baseQty * 0.7, this.baseQty, this.baseQty * 1.3];
+    const frc = frcValues[Math.min(state.forecastBin, frcValues.length - 1)];
+
+    return [price, comp, month, lag, inv, frc, 0, 3, 4.0, this.baseCost];
+  }
+
+  hasDemandModel(): boolean {
+    return this.demandModel !== null;
+  }
+
   reset(): State {
     this.currentIdx = Math.floor(Math.random() * this.rows.length);
     this.lastAction = -1;
@@ -178,11 +243,16 @@ export class PricingEnvironment {
     const multiplier = ACTION_MULTIPLIERS[action];
     const price = this.basePrice * multiplier;
 
-    const effectiveElasticity = this.getEffectiveElasticity(state);
-    const priceChangeRatio = (price - this.basePrice) / (this.basePrice || 1);
-    // Use demand_forecast as base qty when available, fall back to actual qty
-    const baseQ = this.hasExtendedState && row.demand_forecast > 0 ? row.demand_forecast : row.qty;
-    const predictedQty = Math.max(1, baseQ * Math.exp(-effectiveElasticity * priceChangeRatio));
+    let predictedQty: number;
+    if (this.demandModel) {
+      predictedQty = this.predictWithGBRT(row, price);
+    } else {
+      const effectiveElasticity = this.getEffectiveElasticity(state);
+      const priceChangeRatio = (price - this.basePrice) / (this.basePrice || 1);
+      // Use demand_forecast as base qty when available, fall back to actual qty
+      const baseQ = this.hasExtendedState && row.demand_forecast > 0 ? row.demand_forecast : row.qty;
+      predictedQty = Math.max(1, baseQ * Math.exp(-effectiveElasticity * priceChangeRatio));
+    }
 
     const revenue = price * predictedQty;
     const margin = (price - this.baseCost) * predictedQty;
@@ -244,12 +314,19 @@ export class PricingEnvironment {
   syntheticStep(state: State, action: number): StepResult {
     const multiplier = ACTION_MULTIPLIERS[action];
     const price = this.basePrice * multiplier;
-    const demandScale = 0.6 + (state.demandBin / (DEMAND_BINS - 1)) * 0.5;
-    const baseQ = this.baseQty * demandScale;
-    const effectiveElasticity = this.getEffectiveElasticity(state);
-    const priceChangeRatio = (price - this.basePrice) / (this.basePrice || 1);
-    const noise = 0.9 + Math.random() * 0.2;
-    const predictedQty = Math.max(1, baseQ * Math.exp(-effectiveElasticity * priceChangeRatio) * noise);
+    let predictedQty: number;
+    if (this.demandModel) {
+      const features = this.buildSyntheticFeatures(state, price);
+      const noise = 0.9 + Math.random() * 0.2;
+      predictedQty = Math.max(1, predictModel(this.demandModel, features) * noise);
+    } else {
+      const demandScale = 0.6 + (state.demandBin / (DEMAND_BINS - 1)) * 0.5;
+      const baseQ = this.baseQty * demandScale;
+      const effectiveElasticity = this.getEffectiveElasticity(state);
+      const priceChangeRatio = (price - this.basePrice) / (this.basePrice || 1);
+      const noise = 0.9 + Math.random() * 0.2;
+      predictedQty = Math.max(1, baseQ * Math.exp(-effectiveElasticity * priceChangeRatio) * noise);
+    }
 
     const revenue = price * predictedQty;
     const margin = (price - this.baseCost) * predictedQty;
@@ -282,11 +359,17 @@ export class PricingEnvironment {
     const multiplier = ACTION_MULTIPLIERS[action];
     const price = this.basePrice * multiplier;
 
-    const demandScale = overrides?.demandMultiplier ?? (0.6 + (state.demandBin / (DEMAND_BINS - 1)) * 0.5);
-    const baseQ = this.baseQty * demandScale;
-    const effectiveElasticity = this.getEffectiveElasticity(state);
-    const priceChangeRatio = (price - this.basePrice) / (this.basePrice || 1);
-    const predictedQty = Math.max(1, baseQ * Math.exp(-effectiveElasticity * priceChangeRatio));
+    let predictedQty: number;
+    if (this.demandModel) {
+      const features = this.buildSyntheticFeatures(state, price);
+      predictedQty = Math.max(1, predictModel(this.demandModel, features));
+    } else {
+      const demandScale = overrides?.demandMultiplier ?? (0.6 + (state.demandBin / (DEMAND_BINS - 1)) * 0.5);
+      const baseQ = this.baseQty * demandScale;
+      const effectiveElasticity = this.getEffectiveElasticity(state);
+      const priceChangeRatio = (price - this.basePrice) / (this.basePrice || 1);
+      predictedQty = Math.max(1, baseQ * Math.exp(-effectiveElasticity * priceChangeRatio));
+    }
 
     const revenue = price * predictedQty;
     const margin = (price - this.baseCost) * predictedQty;

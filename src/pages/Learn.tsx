@@ -199,6 +199,35 @@ export function Learn({ onNavigate }: LearnProps) {
         </Typography>
       </Section>
 
+      {/* ---- Demand Model Modes ---- */}
+      <Section title="Simple vs Advanced Demand Models" badge="New">
+        <Typography variant="body-sm">
+          The demo offers two demand models that power the RL agent's environment:
+        </Typography>
+        <ul className="list-disc list-inside space-y-2">
+          <Typography variant="body-sm" as="li">
+            <strong>Simple (Log-Linear)</strong> — A hand-coded elasticity formula where demand decreases exponentially
+            with price. Fast and interpretable, but assumes a specific functional form that may not match real data.
+          </Typography>
+          <Typography variant="body-sm" as="li">
+            <strong>Advanced (Gradient Boosted Trees)</strong> — A machine learning model trained directly on the dataset.
+            It learns non-linear relationships between price, competitor pricing, seasonality, and other features to
+            predict demand. More accurate but requires training time.
+          </Typography>
+        </ul>
+        <Typography variant="body-sm">
+          <Term term="Gradient Boosted Trees (GBT)" definition="An ensemble method that builds decision trees sequentially. Each new tree corrects the errors of previous trees, gradually improving prediction accuracy." /> work
+          by building trees iteratively — each tree corrects the mistakes of the ensemble so far. The model starts
+          with a simple average prediction, then adds trees that each reduce the remaining error. After 100 trees,
+          the combined model captures complex patterns like non-linear price sensitivity and feature interactions.
+        </Typography>
+        <Typography variant="body-sm">
+          Why does it matter? The RL agent learns by simulating pricing decisions against the demand model.
+          A more accurate demand model produces more realistic simulations, leading to a better-trained pricing agent.
+          Compare the two modes to see the difference in RL performance.
+        </Typography>
+      </Section>
+
       {/* ---- Demand Model ---- */}
       <Section title="Demand & Elasticity Model" badge="State-Dependent">
         <Typography variant="body-sm">

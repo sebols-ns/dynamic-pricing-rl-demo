@@ -1,0 +1,174 @@
+import { useState, useRef, useCallback } from 'react';
+import type { RetailRow } from '../types/data';
+import {
+  type GBRTModel, type GBRTConfig, type GBRTSnapshot, type PreparedData,
+  type DemandCurvePoint, type TrainingContext,
+  DEFAULT_GBRT_CONFIG, prepareFeatures, initTraining, trainOneTree, generateDemandCurve,
+} from '../engine/gbrt';
+
+interface GbrtTrainingState {
+  isRunning: boolean;
+  isComplete: boolean;
+  currentTree: number;
+  totalTrees: number;
+  trainR2: number;
+  featureImportance: number[];
+  featureNames: string[];
+  predictions: Float64Array | null;
+  actuals: Float64Array | null;
+  model: GBRTModel | null;
+  demandCurveData: DemandCurvePoint[];
+}
+
+const UI_UPDATE_INTERVAL_MS = 80;
+
+export function useGbrtTraining() {
+  const [state, setState] = useState<GbrtTrainingState>({
+    isRunning: false,
+    isComplete: false,
+    currentTree: 0,
+    totalTrees: DEFAULT_GBRT_CONFIG.nTrees,
+    trainR2: 0,
+    featureImportance: [],
+    featureNames: [],
+    predictions: null,
+    actuals: null,
+    model: null,
+    demandCurveData: [],
+  });
+
+  const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const ctxRef = useRef<TrainingContext | null>(null);
+  const dataRef = useRef<PreparedData | null>(null);
+  const rowsRef = useRef<RetailRow[]>([]);
+  const isRunningRef = useRef(false);
+  const treeIndexRef = useRef(0);
+  const speedRef = useRef(1);
+
+  const flushSnapshot = useCallback((snapshot: GBRTSnapshot, ctx: TrainingContext) => {
+    const curve = generateDemandCurve(ctx.model, rowsRef.current);
+    setState(prev => ({
+      ...prev,
+      currentTree: snapshot.treeIndex + 1,
+      trainR2: snapshot.trainR2,
+      featureImportance: snapshot.featureImportance,
+      featureNames: ctx.model.featureNames,
+      predictions: snapshot.predictions,
+      actuals: dataRef.current?.y ?? null,
+      model: ctx.model,
+      demandCurveData: curve,
+    }));
+  }, []);
+
+  const initialize = useCallback((rows: RetailRow[], config?: Partial<GBRTConfig>) => {
+    if (timerRef.current) clearTimeout(timerRef.current);
+    isRunningRef.current = false;
+
+    const fullConfig = { ...DEFAULT_GBRT_CONFIG, ...config };
+    const data = prepareFeatures(rows);
+    const ctx = initTraining(data, fullConfig);
+    dataRef.current = data;
+    ctxRef.current = ctx;
+    rowsRef.current = rows;
+    treeIndexRef.current = 0;
+
+    setState({
+      isRunning: false,
+      isComplete: false,
+      currentTree: 0,
+      totalTrees: fullConfig.nTrees,
+      trainR2: 0,
+      featureImportance: [],
+      featureNames: data.featureNames,
+      predictions: null,
+      actuals: data.y,
+      model: null,
+      demandCurveData: [],
+    });
+  }, []);
+
+  const runBatch = useCallback(() => {
+    if (!isRunningRef.current || !ctxRef.current) return;
+
+    const ctx = ctxRef.current;
+    const totalTrees = ctx.config.nTrees;
+    const treesPerTick = Math.max(1, speedRef.current);
+    let lastSnapshot: GBRTSnapshot | null = null;
+
+    for (let i = 0; i < treesPerTick && treeIndexRef.current < totalTrees; i++) {
+      lastSnapshot = trainOneTree(ctx, treeIndexRef.current);
+      treeIndexRef.current++;
+    }
+
+    if (lastSnapshot) {
+      flushSnapshot(lastSnapshot, ctx);
+    }
+
+    if (treeIndexRef.current >= totalTrees) {
+      isRunningRef.current = false;
+      setState(prev => ({ ...prev, isRunning: false, isComplete: true }));
+    } else {
+      timerRef.current = setTimeout(runBatch, UI_UPDATE_INTERVAL_MS);
+    }
+  }, [flushSnapshot]);
+
+  const play = useCallback(() => {
+    if (!ctxRef.current) return;
+    isRunningRef.current = true;
+    setState(prev => ({ ...prev, isRunning: true }));
+    timerRef.current = setTimeout(runBatch, 0);
+  }, [runBatch]);
+
+  const pause = useCallback(() => {
+    isRunningRef.current = false;
+    if (timerRef.current) clearTimeout(timerRef.current);
+    setState(prev => ({ ...prev, isRunning: false }));
+  }, []);
+
+  const stepOnce = useCallback(() => {
+    if (!ctxRef.current) return;
+    const ctx = ctxRef.current;
+    if (treeIndexRef.current >= ctx.config.nTrees) return;
+    const snapshot = trainOneTree(ctx, treeIndexRef.current);
+    treeIndexRef.current++;
+    flushSnapshot(snapshot, ctx);
+    if (treeIndexRef.current >= ctx.config.nTrees) {
+      setState(prev => ({ ...prev, isComplete: true }));
+    }
+  }, [flushSnapshot]);
+
+  const reset = useCallback(() => {
+    if (timerRef.current) clearTimeout(timerRef.current);
+    isRunningRef.current = false;
+    if (dataRef.current && rowsRef.current.length > 0) {
+      const ctx = initTraining(dataRef.current, ctxRef.current?.config ?? DEFAULT_GBRT_CONFIG);
+      ctxRef.current = ctx;
+      treeIndexRef.current = 0;
+    }
+    setState(prev => ({
+      ...prev,
+      isRunning: false,
+      isComplete: false,
+      currentTree: 0,
+      trainR2: 0,
+      featureImportance: [],
+      predictions: null,
+      model: null,
+      demandCurveData: [],
+    }));
+  }, []);
+
+  const setSpeed = useCallback((speed: number) => {
+    speedRef.current = speed;
+  }, []);
+
+  return {
+    ...state,
+    initialize,
+    play,
+    pause,
+    stepOnce,
+    reset,
+    setSpeed,
+  };
+}

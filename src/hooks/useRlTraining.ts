@@ -1,6 +1,7 @@
 import { useState, useRef, useCallback } from 'react';
 import type { EpisodeResult, RewardWeights, TrainingConfig } from '../types/rl';
 import type { RetailRow } from '../types/data';
+import type { GBRTModel } from '../engine/gbrt';
 import { PricingEnvironment } from '../engine/environment';
 import { QLearningAgent } from '../engine/q-learning';
 
@@ -43,11 +44,11 @@ export function useRlTraining() {
   const noImprovementCountRef = useRef(0);
   const earlyStoppedRef = useRef(false);
 
-  const initialize = useCallback((productRows: RetailRow[], weights: RewardWeights, config?: Partial<TrainingConfig>) => {
+  const initialize = useCallback((productRows: RetailRow[], weights: RewardWeights, config?: Partial<TrainingConfig>, demandModel?: GBRTModel) => {
     if (timerRef.current) clearTimeout(timerRef.current);
     isRunningRef.current = false;
 
-    const env = new PricingEnvironment({ productRows, weights });
+    const env = new PricingEnvironment({ productRows, weights, demandModel });
     const agent = new QLearningAgent(config, env.getTotalStates());
     envRef.current = env;
     agentRef.current = agent;
