@@ -59,6 +59,314 @@ function Section({ title, children, defaultOpen = false, tryItTab, onNavigate, b
   );
 }
 
+// ---------------------------------------------------------------------------
+// Q-Update Walkthrough
+// ---------------------------------------------------------------------------
+
+const QUPDATE_ALPHA = 0.15;
+
+const QUPDATE_STEPS = [
+  { label: 'First visit', episode: 1,    epsilon: 1.000, isExploration: true,  action: 3, multiplier: 1.00, reward: 0.58, prevQ: 0.000 },
+  { label: '2nd visit',   episode: 1,    epsilon: 1.000, isExploration: true,  action: 7, multiplier: 1.20, reward: 0.79, prevQ: 0.000 },
+  { label: 'Ep. 50',      episode: 50,   epsilon: 0.951, isExploration: true,  action: 9, multiplier: 1.40, reward: 0.88, prevQ: 0.127 },
+  { label: 'Ep. 500',     episode: 500,  epsilon: 0.223, isExploration: false, action: 9, multiplier: 1.40, reward: 0.86, prevQ: 0.831 },
+  { label: 'Converged',   episode: 2000, epsilon: 0.010, isExploration: false, action: 9, multiplier: 1.40, reward: 0.87, prevQ: 0.868 },
+];
+
+const QUPDATE_DESCS = [
+  'All Q-values start at 0. ε = 1.0 means 100% random — the agent has no idea what works yet, so it always explores. Action 3 (1.00×) is chosen at random. The update nudges Q(1.00×) from 0 → 0.087.',
+  'Still episode 1, a different step in the same episode. Another random action — this time 1.20×. This state (summer, high demand, expensive competitors) rewards higher prices, so the reward is better. Q(1.20×) jumps from 0 → 0.119.',
+  '50 episodes in. Q(1.40×) has been tried a few times and reached 0.127. The agent still mostly explores (ε = 0.95), but 1.40× consistently gets good rewards. This visit pushes it to 0.240.',
+  '500 episodes in. ε = 0.22 — the agent usually exploits now. Q(1.40×) = 0.831 is the clear winner for this state. The update only moves by 0.004 because the Q-value is nearly converged to the true mean reward.',
+  'Training complete. ε = 0.01. The Q-value barely moves (< 0.001 update per step). The agent has learned: in summer + high demand + expensive competitors → always price at 1.40×.',
+];
+
+function QUpdateWalkthrough() {
+  const [step, setStep] = useState(0);
+  const s = QUPDATE_STEPS[step];
+  const price = (60 * s.multiplier).toFixed(2);
+  const error = s.reward - s.prevQ;
+  const update = QUPDATE_ALPHA * error;
+  const newQ = s.prevQ + update;
+
+  return (
+    <div className="space-y-3 mt-1">
+      {/* Scenario badge */}
+      <div className="rounded-lg p-3 flex flex-wrap gap-2 items-center" style={{ background: 'var(--color-gray)' }}>
+        <Typography variant="body-xs" style={{ color: 'var(--color-secondary)' }}>Scenario:</Typography>
+        {['☀️ Summer', '📈 High Demand', '💰 Expensive Competitors'].map(tag => (
+          <span key={tag} className="text-xs px-2 py-0.5 rounded-full font-medium"
+            style={{ background: 'rgba(59,130,246,0.12)', color: 'var(--color-interactive)' }}>
+            {tag}
+          </span>
+        ))}
+        <Typography variant="body-xs" style={{ color: 'var(--color-secondary)' }}>· Base price: $60</Typography>
+      </div>
+
+      {/* Step pills */}
+      <div className="flex gap-1">
+        {QUPDATE_STEPS.map((st, i) => (
+          <button
+            key={i}
+            onClick={() => setStep(i)}
+            className="flex-1 py-1.5 rounded text-xs font-medium cursor-pointer"
+            style={{
+              background: i === step ? 'var(--color-interactive)' : 'var(--color-gray)',
+              color: i === step ? '#fff' : 'var(--color-secondary)',
+              opacity: i > step ? 0.55 : 1,
+              border: 'none',
+            }}
+          >
+            {st.label}
+          </button>
+        ))}
+      </div>
+
+      {/* Episode / epsilon / mode badges */}
+      <div className="flex flex-wrap gap-2">
+        <span className="text-xs px-2 py-0.5 rounded" style={{ background: 'var(--color-gray)', color: 'var(--color-secondary)' }}>
+          Episode {s.episode.toLocaleString()}
+        </span>
+        <span className="text-xs px-2 py-0.5 rounded font-mono" style={{ background: 'var(--color-gray)', color: 'var(--color-secondary)' }}>
+          ε = {s.epsilon.toFixed(3)}
+        </span>
+        <span className="text-xs px-2 py-0.5 rounded font-medium" style={{
+          background: s.isExploration ? '#fef3c7' : '#d1fae5',
+          color: s.isExploration ? '#92400e' : '#065f46',
+        }}>
+          {s.isExploration ? '🎲 Exploring — random action' : '🎯 Exploiting — best Q-value'}
+        </span>
+      </div>
+
+      {/* Action taken */}
+      <div className="rounded-lg px-3 py-2 border" style={{ borderColor: 'var(--color-gray)' }}>
+        <Typography variant="body-xs" style={{ color: 'var(--color-secondary)' }}>Action taken this step</Typography>
+        <Typography variant="body-sm" className="mt-1">
+          Action {s.action} &nbsp;·&nbsp; <strong>{s.multiplier.toFixed(2)}× multiplier</strong> &nbsp;·&nbsp; Price = <strong>${price}</strong>
+          &ensp;→&ensp; Reward = <strong style={{ color: '#059669' }}>{s.reward.toFixed(2)}</strong>
+        </Typography>
+      </div>
+
+      {/* Formula breakdown */}
+      <div className="rounded-lg border p-3 space-y-1.5" style={{ borderColor: 'var(--color-gray)', fontFamily: 'ui-monospace, monospace', fontSize: '13px' }}>
+        <Typography variant="body-xs" style={{ color: 'var(--color-secondary)', fontFamily: 'inherit', marginBottom: '4px' }}>
+          Q-value update &nbsp;(α = 0.15, γ = 0 so no future term)
+        </Typography>
+        <div>
+          <span style={{ color: 'var(--color-secondary)' }}>current Q(state, {s.multiplier.toFixed(2)}×) = </span>
+          <strong>{s.prevQ.toFixed(3)}</strong>
+        </div>
+        <div>
+          <span style={{ color: 'var(--color-secondary)' }}>reward received&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; = </span>
+          <strong style={{ color: '#059669' }}>{s.reward.toFixed(3)}</strong>
+        </div>
+        <div style={{ borderTop: '1px solid var(--color-gray)', paddingTop: '6px' }}>
+          <span style={{ color: 'var(--color-secondary)' }}>error = {s.reward.toFixed(3)} − {s.prevQ.toFixed(3)} = </span>
+          <strong style={{ color: error >= 0 ? '#059669' : '#dc2626' }}>
+            {error >= 0 ? '+' : ''}{error.toFixed(3)}
+          </strong>
+          <span style={{ color: 'var(--color-secondary)', fontSize: '11px' }}>
+            &nbsp;{error > 0.02 ? '(better than expected)' : error < -0.02 ? '(worse than expected)' : '(about as expected)'}
+          </span>
+        </div>
+        <div>
+          <span style={{ color: 'var(--color-secondary)' }}>update = 0.15 × ({error >= 0 ? '+' : ''}{error.toFixed(3)}) = </span>
+          <strong style={{ color: error >= 0 ? '#059669' : '#dc2626' }}>
+            {error >= 0 ? '+' : ''}{update.toFixed(3)}
+          </strong>
+        </div>
+        <div style={{ borderTop: '1px solid var(--color-gray)', paddingTop: '6px' }}>
+          <span style={{ color: 'var(--color-secondary)' }}>new Q = {s.prevQ.toFixed(3)} {update >= 0 ? '+' : ''}{update.toFixed(3)} = </span>
+          <strong style={{ color: 'var(--color-interactive)', fontSize: '15px' }}>{newQ.toFixed(3)}</strong>
+        </div>
+      </div>
+
+      {/* Narrative */}
+      <div className="rounded-lg p-3" style={{ background: 'var(--color-gray)' }}>
+        <Typography variant="body-xs">{QUPDATE_DESCS[step]}</Typography>
+      </div>
+
+      {/* Prev / Next */}
+      <div className="flex justify-between items-center">
+        <Button variant="link" onClick={() => setStep(prev => Math.max(0, prev - 1))} disabled={step === 0}>← Prev</Button>
+        <Typography variant="body-xs" style={{ color: 'var(--color-secondary)' }}>{step + 1} / {QUPDATE_STEPS.length}</Typography>
+        <Button variant="link" onClick={() => setStep(prev => Math.min(QUPDATE_STEPS.length - 1, prev + 1))} disabled={step === QUPDATE_STEPS.length - 1}>Next →</Button>
+      </div>
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Epsilon-Greedy Demo
+// ---------------------------------------------------------------------------
+
+const EG_MULTIPLIERS = [0.80, 0.90, 0.95, 1.00, 1.05, 1.10, 1.15, 1.20, 1.30, 1.40, 1.50, 1.60];
+
+// Pre-defined Q-value snapshots at episode milestones for
+// the summer / high-demand / expensive-competitor state.
+// Action multipliers correspond to EG_MULTIPLIERS above.
+const EG_Q_MILESTONES: Array<[number, number[]]> = [
+  [0,    [0,    0,    0,    0,    0,    0,    0,    0,    0,    0,    0,    0   ]],
+  [100,  [0.05, 0.08, 0.12, 0.18, 0.23, 0.29, 0.35, 0.41, 0.46, 0.50, 0.39, 0.25]],
+  [500,  [0.07, 0.13, 0.21, 0.33, 0.41, 0.52, 0.61, 0.67, 0.73, 0.80, 0.68, 0.47]],
+  [1000, [0.09, 0.17, 0.26, 0.38, 0.47, 0.58, 0.65, 0.72, 0.77, 0.85, 0.73, 0.52]],
+  [2000, [0.10, 0.18, 0.28, 0.40, 0.49, 0.59, 0.66, 0.73, 0.78, 0.87, 0.75, 0.55]],
+  [4000, [0.10, 0.19, 0.29, 0.41, 0.50, 0.60, 0.67, 0.73, 0.78, 0.87, 0.75, 0.56]],
+];
+
+function lerpQValues(episode: number): number[] {
+  const ms = EG_Q_MILESTONES;
+  if (episode <= ms[0][0]) return [...ms[0][1]];
+  if (episode >= ms[ms.length - 1][0]) return [...ms[ms.length - 1][1]];
+  for (let i = 0; i < ms.length - 1; i++) {
+    const [e0, q0] = ms[i];
+    const [e1, q1] = ms[i + 1];
+    if (episode >= e0 && episode <= e1) {
+      const t = (episode - e0) / (e1 - e0);
+      return q0.map((v, j) => +(v + t * (q1[j] - v)).toFixed(3));
+    }
+  }
+  return [...ms[ms.length - 1][1]];
+}
+
+function EpsilonGreedyDemo() {
+  const [episode, setEpisode] = useState(1);
+  const epsilon = +Math.max(0.01, Math.pow(0.999, episode)).toFixed(3);
+  const randomDraw = 0.43;
+  const isExploration = randomDraw < epsilon;
+  const qValues = lerpQValues(episode);
+  const maxQ = Math.max(...qValues);
+  const bestAction = qValues.indexOf(maxQ);
+
+  // Rough phase label
+  const phase =
+    epsilon > 0.7 ? 'Exploration phase — agent mostly trying random actions'
+    : epsilon > 0.2 ? 'Transition phase — exploring and exploiting in mix'
+    : epsilon > 0.05 ? 'Exploitation phase — mostly following learned policy'
+    : 'Converged — policy locked in, 1% random exploration remaining';
+
+  return (
+    <div className="space-y-3 mt-1">
+      {/* Scenario badge */}
+      <div className="rounded-lg p-3 flex flex-wrap gap-2 items-center" style={{ background: 'var(--color-gray)' }}>
+        <Typography variant="body-xs" style={{ color: 'var(--color-secondary)' }}>Same state:</Typography>
+        {['☀️ Summer', '📈 High Demand', '💰 Expensive Competitors'].map(tag => (
+          <span key={tag} className="text-xs px-2 py-0.5 rounded-full font-medium"
+            style={{ background: 'rgba(59,130,246,0.12)', color: 'var(--color-interactive)' }}>
+            {tag}
+          </span>
+        ))}
+      </div>
+
+      {/* Slider */}
+      <div>
+        <div className="flex justify-between mb-1">
+          <Typography variant="body-xs" style={{ color: 'var(--color-secondary)' }}>Drag to change episode</Typography>
+          <Typography variant="body-xs" style={{ fontWeight: 600 }}>Episode {episode.toLocaleString()}</Typography>
+        </div>
+        <input
+          type="range" min={1} max={4000} step={10} value={episode}
+          onChange={e => setEpisode(Number(e.target.value))}
+          style={{ width: '100%', accentColor: 'var(--color-interactive)' }}
+        />
+        <div className="flex justify-between">
+          <Typography variant="body-xs" style={{ color: 'var(--color-secondary)' }}>1 — fully random</Typography>
+          <Typography variant="body-xs" style={{ color: 'var(--color-secondary)' }}>4,000 — converged</Typography>
+        </div>
+        <Typography variant="body-xs" style={{ color: 'var(--color-interactive)', marginTop: '2px' }}>{phase}</Typography>
+      </div>
+
+      {/* Epsilon + coin-flip result */}
+      <div className="grid grid-cols-2 gap-3">
+        <div className="rounded-lg p-3 border space-y-2" style={{ borderColor: 'var(--color-gray)' }}>
+          <Typography variant="body-xs" style={{ color: 'var(--color-secondary)' }}>Epsilon (ε)</Typography>
+          <div className="text-2xl font-bold" style={{ color: 'var(--color-interactive)' }}>{epsilon.toFixed(3)}</div>
+          <div className="rounded-full h-2 overflow-hidden" style={{ background: 'var(--color-gray)' }}>
+            <div className="h-full rounded-full transition-all duration-200"
+              style={{ width: `${epsilon * 100}%`, background: 'var(--color-interactive)' }} />
+          </div>
+          <div className="flex justify-between">
+            <Typography variant="body-xs" style={{ color: 'var(--color-secondary)' }}>exploit (0)</Typography>
+            <Typography variant="body-xs" style={{ color: 'var(--color-secondary)' }}>explore (1)</Typography>
+          </div>
+        </div>
+
+        <div className="rounded-lg p-3 space-y-1" style={{
+          border: `2px solid ${isExploration ? '#f59e0b' : '#10b981'}`,
+        }}>
+          <Typography variant="body-xs" style={{ color: 'var(--color-secondary)' }}>Random draw = 0.43</Typography>
+          <Typography variant="body-xs">
+            0.43 {isExploration ? '<' : '≥'} ε ({epsilon.toFixed(3)})
+          </Typography>
+          <div className="text-base font-bold pt-0.5" style={{ color: isExploration ? '#92400e' : '#065f46' }}>
+            {isExploration ? '🎲 EXPLORE' : '🎯 EXPLOIT'}
+          </div>
+          <Typography variant="body-xs" style={{ color: 'var(--color-secondary)' }}>
+            {isExploration
+              ? 'Pick any of 12 actions at random'
+              : `Pick action ${bestAction} (${EG_MULTIPLIERS[bestAction].toFixed(2)}×) — highest Q`}
+          </Typography>
+        </div>
+      </div>
+
+      {/* Q-value bar chart */}
+      <div className="rounded-lg border p-3" style={{ borderColor: 'var(--color-gray)' }}>
+        <Typography variant="body-xs" style={{ color: 'var(--color-secondary)', marginBottom: '8px' }}>
+          Q-values for this state —&nbsp;
+          {isExploration
+            ? 'being ignored this step (agent is exploring)'
+            : 'argmax selects the highlighted action'}
+        </Typography>
+        <div className="flex items-end gap-0.5" style={{ height: '68px' }}>
+          {qValues.map((q, i) => {
+            const isWinner = !isExploration && i === bestAction;
+            const barH = maxQ > 0 ? Math.max(3, (q / maxQ) * 64) : 3;
+            return (
+              <div key={i} className="flex-1 flex flex-col justify-end" style={{ height: '68px' }}>
+                <div
+                  className="w-full rounded-sm transition-all duration-300"
+                  style={{
+                    height: `${barH}px`,
+                    background: isWinner
+                      ? 'var(--color-interactive)'
+                      : isExploration
+                        ? 'var(--color-gray)'
+                        : '#93c5fd',
+                    outline: isWinner ? '2px solid var(--color-interactive)' : 'none',
+                  }}
+                />
+              </div>
+            );
+          })}
+        </div>
+        <div className="flex gap-0.5 mt-1">
+          {EG_MULTIPLIERS.map((m, i) => (
+            <div key={i} className="flex-1 text-center" style={{
+              fontSize: '8px',
+              color: !isExploration && i === bestAction ? 'var(--color-interactive)' : 'var(--color-secondary)',
+              fontWeight: !isExploration && i === bestAction ? 700 : 400,
+            }}>
+              {m.toFixed(2)}
+            </div>
+          ))}
+        </div>
+        {!isExploration && maxQ > 0 && (
+          <Typography variant="body-xs" style={{ color: 'var(--color-interactive)', marginTop: '6px' }}>
+            ↑ Action {bestAction} ({EG_MULTIPLIERS[bestAction].toFixed(2)}×) — Q = {maxQ.toFixed(3)} (highest in table for this state)
+          </Typography>
+        )}
+        {isExploration && (
+          <Typography variant="body-xs" style={{ color: '#92400e', marginTop: '6px' }}>
+            Q-values ignored this step — a random action is selected instead
+          </Typography>
+        )}
+      </div>
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
+
 interface LearnProps {
   onNavigate?: (tab: string) => void;
 }
@@ -166,36 +474,29 @@ export function Learn({ onNavigate }: LearnProps) {
       {/* ---- Q-Learning ---- */}
       <Section title="Q-Learning Algorithm" badge="108 states × 12 actions" onNavigate={onNavigate} tryItTab="training">
         <Typography variant="body-sm">
-          <Term term="Q-Learning" definition="A model-free RL algorithm that learns Q(s,a) — the expected reward of taking action a in state s, then following the optimal policy." /> is
-          a model-free RL algorithm. It maintains a <Term term="Q-table" definition="A lookup table mapping every (state, action) pair to its expected reward. Updated incrementally during training." /> of
-          expected rewards and updates them using the Bellman equation:
+          <Term term="Q-Learning" definition="A model-free RL algorithm that learns Q(s,a) — the expected reward of taking action a in state s, then following the optimal policy." /> maintains
+          a <Term term="Q-table" definition="A lookup table mapping every (state, action) pair to its expected reward. Updated incrementally during training." /> of
+          expected rewards. Because the discount factor γ = 0 (each pricing decision is independent), the full Bellman equation reduces to a simple running average:
         </Typography>
+        <code className="text-sm px-3 py-2 rounded-lg block" style={{ background: 'var(--color-gray)', fontFamily: 'ui-monospace, monospace' }}>
+          Q(s, a) ← Q(s, a) + α · [r − Q(s, a)]
+        </code>
         <Typography variant="body-sm">
-          <code className="text-sm px-2 py-1 rounded block" style={{ background: 'var(--color-gray)' }}>
-            Q(s,a) ← Q(s,a) + α · [r + γ · max Q(s',a') − Q(s,a)]
-          </code>
+          Each update nudges the Q-value 15% of the way toward the latest reward. Over thousands of steps, it converges to the true mean reward for that (state, action) pair. Step through a concrete example below — same state, same action, across the full training arc:
         </Typography>
-        <Typography variant="body-sm">
-          Key hyperparameters in this demo:
-        </Typography>
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '4px 24px' }}>
+        <QUpdateWalkthrough />
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '4px 24px', marginTop: '4px' }}>
           {[
-            ['α = 0.2 (learning rate)', 'How fast Q-values update with new experience'],
+            ['α = 0.15 (learning rate)', 'Each update moves 15% toward the new reward — balances speed and stability'],
             ['γ = 0.0 (discount factor)', 'Zero — each pricing decision is independent (contextual bandit)'],
-            ['ε: 1.0 → 0.01 (exploration)', 'Decays at 0.997× per episode — starts exploring, ends exploiting'],
-            ['200 steps/episode', 'Each episode simulates 200 pricing decisions across different market states'],
-            ['5,000 max episodes', 'Up to 1M total pricing decisions, with early stopping if converged'],
+            ['200 steps / episode', 'Each episode simulates 200 pricing decisions across different market states'],
+            ['Up to 15,000 episodes', 'Early stopping triggers when the rolling reward stops improving'],
           ].map(([param, desc]) => (
             <Typography key={param} variant="body-xs" style={{ color: 'var(--color-secondary)' }}>
               <strong>{param}</strong> — {desc}
             </Typography>
           ))}
         </div>
-        <Typography variant="body-sm">
-          The Q-table initializes at zero. The agent starts fully random (ε = 1.0) and gradually shifts to
-          exploitation as ε decays. Early stopping triggers when the rolling average reward hasn't improved
-          for 300 episodes after ε falls below 0.05, typically converging around 1,500–2,000 episodes.
-        </Typography>
       </Section>
 
       {/* ---- Demand Model Modes ---- */}
@@ -339,21 +640,19 @@ export function Learn({ onNavigate }: LearnProps) {
         <Typography variant="body-sm">
           The agent faces a fundamental dilemma: should it <Term term="explore" definition="Try random actions to discover potentially better strategies. Essential early in training." /> (try
           new prices) or <Term term="exploit" definition="Use the best known action (highest Q-value). Important once the agent has learned good strategies." /> (use
-          what it knows)?
+          what it already knows works)?
         </Typography>
         <Typography variant="body-sm">
           The <Term term="ε-greedy policy" definition="With probability ε, take a random action (explore). With probability 1-ε, take the best known action (exploit)." /> solves
-          this by starting with high exploration (ε = 1.0) and gradually shifting to exploitation (ε → 0.01).
-          With decay rate 0.997, the agent transitions through three phases:
+          this with a single rule: at each step, draw a random number between 0 and 1. If it is less than ε, explore (pick randomly). Otherwise, exploit (pick the highest Q-value). ε decays by 0.999× after every episode — starting at 1.0 (always random) and flooring at 0.01.
         </Typography>
-        <ul className="list-disc list-inside space-y-1">
-          <Typography variant="body-sm" as="li"><strong>Episodes 1–500</strong>: Mostly exploring (ε {'>'} 0.2). Tries many prices to map the reward landscape.</Typography>
-          <Typography variant="body-sm" as="li"><strong>Episodes 500–1000</strong>: Transitioning. Increasingly favours learned strategies but still experiments.</Typography>
-          <Typography variant="body-sm" as="li"><strong>Episodes 1000+</strong>: Exploiting (ε {'<'} 0.05). Locks in on the best-known price for each state.</Typography>
-        </ul>
         <Typography variant="body-sm">
-          Early stopping monitors the rolling average reward after the agent enters exploitation phase.
-          If no improvement is seen for 300 consecutive episodes, training converges — typically around episode 1,500–2,000.
+          Drag the slider below to see how the same random draw of <strong>0.43</strong> flips from explore to exploit as ε decays, and how the Q-values build up over training:
+        </Typography>
+        <EpsilonGreedyDemo />
+        <Typography variant="body-sm" style={{ marginTop: '4px' }}>
+          Early stopping monitors the rolling average reward only after ε drops below 0.05.
+          If no improvement for 800 consecutive episodes, training is considered converged — typically around episode 3,000–4,600.
         </Typography>
       </Section>
 
