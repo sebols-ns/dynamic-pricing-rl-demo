@@ -3,6 +3,11 @@ import {
   Typography, Button, Badge,
   Tooltip, TooltipTrigger, TooltipContent, TooltipProvider,
 } from '@northslopetech/altitude-ui';
+import {
+  ResponsiveContainer, ComposedChart, Line,
+  XAxis, YAxis, Tooltip as RechartsTooltip, CartesianGrid,
+  ReferenceLine, ReferenceDot,
+} from 'recharts';
 
 function Term({ term, definition }: { term: string; definition: string }) {
   return (
@@ -101,6 +106,72 @@ function QUpdateWalkthrough() {
           </span>
         ))}
         <Typography variant="body-xs" style={{ color: 'var(--color-secondary)' }}>· Base price: $60</Typography>
+      </div>
+
+      {/* Convergence chart */}
+      <div className="rounded-lg border" style={{ borderColor: 'var(--color-gray)' }}>
+        <div className="px-3 pt-2 pb-0 flex justify-between items-center">
+          <Typography variant="body-xs" style={{ color: 'var(--color-secondary)' }}>
+            Q(state, 1.40×) converging over training — click a step to see where you are
+          </Typography>
+          <div className="flex items-center gap-3" style={{ fontSize: '10px', color: 'var(--color-secondary)' }}>
+            <span style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+              <span style={{ width: 14, height: 2, background: 'var(--color-interactive)', display: 'inline-block', borderRadius: 1 }} />
+              Q-value
+            </span>
+            <span style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+              <span style={{ width: 14, height: 0, borderTop: '2px dashed #94a3b8', display: 'inline-block' }} />
+              target 0.87
+            </span>
+          </div>
+        </div>
+        <ResponsiveContainer width="100%" height={140}>
+          <ComposedChart data={Q_CURVE_DATA} margin={{ top: 6, right: 20, left: -10, bottom: 16 }}>
+            <CartesianGrid strokeDasharray="3 3" stroke="var(--color-gray)" />
+            <XAxis
+              dataKey="episode"
+              type="number"
+              domain={[0, 2000]}
+              tick={{ fontSize: 10 }}
+              label={{ value: 'Episode', position: 'insideBottom', offset: -8, fontSize: 11 }}
+            />
+            <YAxis domain={[0, 1]} tick={{ fontSize: 10 }} width={34} />
+            <RechartsTooltip
+              formatter={((v: number) => [v.toFixed(3), 'Q-value']) as any}
+              labelFormatter={((ep: number) => `Episode ${ep}`) as any}
+            />
+            {/* Target dashed line */}
+            <ReferenceLine y={0.87} stroke="#94a3b8" strokeDasharray="6 3" strokeWidth={1.5} />
+            {/* Vertical marker for current step */}
+            <ReferenceLine
+              x={s.episode}
+              stroke="var(--color-interactive)"
+              strokeWidth={1.5}
+              strokeDasharray="4 3"
+            />
+            {/* Waypoint dots for all 5 steps */}
+            {QUPDATE_STEPS.map((st, i) => (
+              <ReferenceDot
+                key={i}
+                x={st.episode}
+                y={st.prevQ}
+                r={i === step ? 6 : 4}
+                fill={i === step ? 'var(--color-interactive)' : '#fff'}
+                stroke={i === step ? 'var(--color-interactive)' : '#94a3b8'}
+                strokeWidth={2}
+              />
+            ))}
+            {/* Main convergence line */}
+            <Line
+              type="monotone"
+              dataKey="qValue"
+              stroke="var(--color-interactive)"
+              strokeWidth={2}
+              dot={false}
+              isAnimationActive={false}
+            />
+          </ComposedChart>
+        </ResponsiveContainer>
       </div>
 
       {/* Step pills */}
@@ -213,6 +284,23 @@ const EG_Q_MILESTONES: Array<[number, number[]]> = [
   [2000, [0.10, 0.18, 0.28, 0.40, 0.49, 0.59, 0.66, 0.73, 0.78, 0.87, 0.75, 0.55]],
   [4000, [0.10, 0.19, 0.29, 0.41, 0.50, 0.60, 0.67, 0.73, 0.78, 0.87, 0.75, 0.56]],
 ];
+
+// ---------------------------------------------------------------------------
+// Q-value convergence curve for Q(state, 1.40×) — the winning action.
+// Uses a power-law exponential fit to the actual step data:
+//   Q(ep) = 0.87 * (1 - exp(-0.001 * ep^1.293))
+// with diminishing noise (high early, ~zero by ep 600) to look realistic.
+// ---------------------------------------------------------------------------
+function _pseudoNoise(i: number): number {
+  return Math.sin(i * 2.7 + 1.1) * 0.6 + Math.cos(i * 1.3 + 0.5) * 0.4;
+}
+const Q_CURVE_DATA = Array.from({ length: 201 }, (_, i) => {
+  const ep = i * 10;
+  const base = ep === 0 ? 0 : 0.87 * (1 - Math.exp(-0.001 * Math.pow(ep, 1.293)));
+  const noiseAmp = ep === 0 ? 0 : 0.055 * Math.exp(-ep * 0.003);
+  const noise = noiseAmp * _pseudoNoise(i);
+  return { episode: ep, qValue: +Math.max(0, Math.min(0.95, base + noise)).toFixed(3) };
+});
 
 function lerpQValues(episode: number): number[] {
   const ms = EG_Q_MILESTONES;
