@@ -104,10 +104,31 @@ function collectNodes(layout: LayoutNode): LayoutNode[] {
   return result;
 }
 
-function collectEdges(layout: LayoutNode): { x1: number; y1: number; x2: number; y2: number }[] {
-  const result: { x1: number; y1: number; x2: number; y2: number }[] = [];
-  for (const child of layout.children) {
-    result.push({ x1: layout.x, y1: layout.y + 12, x2: child.x, y2: child.y - 12 });
+interface Edge {
+  x1: number;
+  y1: number;
+  x2: number;
+  y2: number;
+  label?: string;
+}
+
+function collectEdges(layout: LayoutNode): Edge[] {
+  const result: Edge[] = [];
+  for (let i = 0; i < layout.children.length; i++) {
+    const child = layout.children[i];
+    const isLeftChild = i === 0;
+    const label = layout.sublabel
+      ? isLeftChild
+        ? layout.sublabel
+        : layout.sublabel.replace('<=', '>')
+      : undefined;
+    result.push({
+      x1: layout.x,
+      y1: layout.y + 12,
+      x2: child.x,
+      y2: child.y - 12,
+      label
+    });
     result.push(...collectEdges(child));
   }
   return result;
@@ -149,14 +170,34 @@ export function TreeVisualization({ tree, featureNames, treeIndex }: TreeVisuali
           viewBox={`0 0 ${svgWidth} ${svgHeight}`}
         >
           {/* Edges */}
-          {edges.map((e, i) => (
-            <line
-              key={`e${i}`}
-              x1={e.x1} y1={e.y1} x2={e.x2} y2={e.y2}
-              stroke="var(--color-neutral-300)"
-              strokeWidth={1}
-            />
-          ))}
+          {edges.map((e, i) => {
+            const midX = (e.x1 + e.x2) / 2;
+            const midY = (e.y1 + e.y2) / 2;
+            // Offset label horizontally based on edge direction
+            const isLeftEdge = e.x2 < e.x1;
+            const xOffset = isLeftEdge ? -24 : 24;
+            return (
+              <g key={`e${i}`}>
+                <line
+                  x1={e.x1} y1={e.y1} x2={e.x2} y2={e.y2}
+                  stroke="var(--color-neutral-300)"
+                  strokeWidth={1}
+                />
+                {e.label && (
+                  <text
+                    x={midX + xOffset}
+                    y={midY}
+                    textAnchor="middle"
+                    fontSize={8}
+                    fill="var(--color-secondary)"
+                    style={{ fontFamily: 'monospace', userSelect: 'none' }}
+                  >
+                    {e.label}
+                  </text>
+                )}
+              </g>
+            );
+          })}
 
           {/* Nodes */}
           {nodes.map((n, i) => {
@@ -199,17 +240,6 @@ export function TreeVisualization({ tree, featureNames, treeIndex }: TreeVisuali
                 >
                   {n.label}
                 </text>
-                {n.sublabel && (
-                  <text
-                    x={n.x} y={n.y - 16}
-                    textAnchor="middle"
-                    fontSize={8}
-                    fill="var(--color-secondary)"
-                    style={{ fontFamily: 'monospace', userSelect: 'none' }}
-                  >
-                    {n.sublabel}
-                  </text>
-                )}
               </g>
             );
           })}
